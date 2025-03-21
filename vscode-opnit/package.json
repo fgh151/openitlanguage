@@ -1,0 +1,25 @@
+{
+    "name": "opnit",
+    "displayName": "Opnit Language Support",
+    "description": "Syntax highlighting for the Opnit programming language",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.60.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "opnit",
+            "aliases": ["Opnit", "opnit"],
+            "extensions": [".opnit"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "opnit",
+            "scopeName": "source.opnit",
+            "path": "./syntaxes/opnit.tmLanguage.json"
+        }]
+    }
+} 

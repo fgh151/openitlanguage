@@ -1,0 +1,25 @@
+# Test basic function with addition
+function add(x: number, y: number) -> number {
+    return x + y;
+}
+
+# Test function with string concatenation
+function greet(name: string) -> string {
+    return "Hello, " + name;
+}
+
+# Test function with no parameters
+function get_pi() -> number {
+    return 3.14159;
+}
+
+# Test nested function calls
+function multiply_and_add(a: number, b: number, c: number) -> number {
+    return add(a * b, c);
+}
+
+# Test all functions
+print(add(5, 3));           # Should print 8
+print(greet("World"));      # Should print "Hello, World"
+print(get_pi());            # Should print 3.14159
+print(multiply_and_add(2, 3, 4));  # Should print 10 (2 * 3 + 4) 

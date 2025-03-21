@@ -11,6 +11,7 @@ class OpnitParser(Parser):
 
     def __init__(self):
         self.env = {}
+        self.functions = {}
 
     @_('statements')
     def program(self, p):
@@ -24,6 +25,14 @@ class OpnitParser(Parser):
     def statements(self, p):
         return p.statements + [p.statement]
 
+    @_('function_def')
+    def statement(self, p):
+        return p.function_def
+
+    @_('expr SEMI')
+    def statement(self, p):
+        return ('statement', p.expr)
+
     @_('expr NEWLINE')
     def statement(self, p):
         return ('statement', p.expr)
@@ -31,6 +40,38 @@ class OpnitParser(Parser):
     @_('NEWLINE')
     def statement(self, p):
         return None
+
+    @_('FUNCTION ID LPAREN param_list RPAREN ARROW type LBRACE statements RBRACE')
+    def function_def(self, p):
+        return ('function', p.ID, p.param_list, p.type, p.statements)
+
+    @_('FUNCTION ID LPAREN RPAREN ARROW type LBRACE statements RBRACE')
+    def function_def(self, p):
+        return ('function', p.ID, [], p.type, p.statements)
+
+    @_('param')
+    def param_list(self, p):
+        return [p.param]
+
+    @_('param_list COMMA param')
+    def param_list(self, p):
+        return p.param_list + [p.param]
+
+    @_('ID COLON type')
+    def param(self, p):
+        return (p.ID, p.type)
+
+    @_('ID')
+    def type(self, p):
+        return p.ID
+
+    @_('RETURN expr SEMI')
+    def statement(self, p):
+        return ('return', p.expr)
+
+    @_('RETURN expr NEWLINE')
+    def statement(self, p):
+        return ('return', p.expr)
 
     @_('expr PLUS expr')
     def expr(self, p):
@@ -66,11 +107,23 @@ class OpnitParser(Parser):
 
     @_('ID LPAREN expr RPAREN')
     def expr(self, p):
-        return ('funcall', p.ID, p.expr)
+        return ('funcall', p.ID, [p.expr])
 
     @_('ID LPAREN expr COMMA expr RPAREN')
     def expr(self, p):
-        return ('funcall2', p.ID, p.expr0, p.expr1)
+        return ('funcall', p.ID, [p.expr0, p.expr1])
+
+    @_('ID LPAREN expr COMMA expr COMMA expr RPAREN')
+    def expr(self, p):
+        return ('funcall', p.ID, [p.expr0, p.expr1, p.expr2])
+
+    @_('ID LPAREN RPAREN')
+    def expr(self, p):
+        return ('funcall', p.ID, [])
+
+    @_('ID')
+    def expr(self, p):
+        return ('var', p.ID)
 
     def error(self, token):
         if token:

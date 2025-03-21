@@ -7,13 +7,19 @@ class OpnitLexer(Lexer):
         LPAREN, RPAREN, COMMA,
         ID,
         TRUE, FALSE,
-        NEWLINE
+        NEWLINE,
+        FUNCTION, RETURN,
+        LBRACE, RBRACE,
+        ARROW,
+        COLON,
+        SEMI
     }
 
     # Ignored characters
     ignore = ' \t'
 
     # Tokens
+    ARROW = r'->'  # Must come before MINUS
     PLUS = r'\+'
     MINUS = r'-'
     TIMES = r'\*'
@@ -21,21 +27,23 @@ class OpnitLexer(Lexer):
     LPAREN = r'\('
     RPAREN = r'\)'
     COMMA = r','
+    LBRACE = r'\{'
+    RBRACE = r'\}'
+    COLON = r':'
+    SEMI = r';'
+    NEWLINE = r'\n+'
 
     # Keywords
     ID = r'[a-zA-Z_][a-zA-Z0-9_]*'
     ID['true'] = TRUE
     ID['false'] = FALSE
+    ID['function'] = FUNCTION
+    ID['return'] = RETURN
 
     # Special handling for comments
     @_(r'\#.*')
     def COMMENT(self, t):
         pass
-
-    @_(r'\n+')
-    def NEWLINE(self, t):
-        self.lineno += len(t.value)
-        return t
 
     @_(r'\d+(\.\d+)?')
     def NUMBER(self, t):

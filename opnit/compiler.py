@@ -10,35 +10,92 @@ class OpnitCompiler:
 
         # Create module and execution engine
         self.module = ir.Module(name="opnit_module")
+        target = llvm.Target.from_default_triple()
+        target_machine = target.create_target_machine()
+        backing_mod = llvm.parse_assembly("")
+        self.engine = llvm.create_mcjit_compiler(backing_mod, target_machine)
         
-        # Add printf declaration
-        printf_ty = ir.FunctionType(ir.IntType(32), [ir.PointerType(ir.IntType(8))], var_arg=True)
-        printf = ir.Function(self.module, printf_ty, name="printf")
-        
-        # Create main function
-        main_ty = ir.FunctionType(ir.IntType(32), [])
-        self.main_func = ir.Function(self.module, main_ty, name="main")
-        self.entry_block = self.main_func.append_basic_block(name='entry')
-        self.builder = ir.IRBuilder(self.entry_block)
-        
-        # Add string constants
+        # Initialize variables
         self.string_constants = {}
-        self.add_string_constant("%.1f\n", "float_fmt")
-        self.add_string_constant("%s\n", "str_fmt")
-        self.add_string_constant("true\n", "true_str")
-        self.add_string_constant("false\n", "false_str")
-        self.add_string_constant("number\n", "number_type")
-        self.add_string_constant("string\n", "string_type")
-        self.add_string_constant("boolean\n", "boolean_type")
-        
-        # Counter for unique string names
-        self.string_counter = 0
-        
-        # Store functions and current function
         self.functions = {}
         self.current_function = None
         self.variables = {}
+        self.string_counter = 0
         
+        # Add target triple and data layout
+        self.module.triple = "unknown-unknown-unknown"
+        self.module.data_layout = ""
+        
+        # Create printf function declaration
+        printf_type = ir.FunctionType(ir.IntType(32), [ir.PointerType(ir.IntType(8))], var_arg=True)
+        self.printf = ir.Function(self.module, printf_type, name="printf")
+        
+        # Create format strings
+        float_fmt = ir.Constant(ir.ArrayType(ir.IntType(8), 6), bytearray("%.1f\n\0".encode()))
+        str_fmt = ir.Constant(ir.ArrayType(ir.IntType(8), 4), bytearray("%s\n\0".encode()))
+        true_str = ir.Constant(ir.ArrayType(ir.IntType(8), 6), bytearray("true\n\0".encode()))
+        false_str = ir.Constant(ir.ArrayType(ir.IntType(8), 7), bytearray("false\n\0".encode()))
+        
+        # Create global variables for format strings
+        float_fmt_var = ir.GlobalVariable(self.module, float_fmt.type, name="float_fmt")
+        float_fmt_var.global_constant = True
+        float_fmt_var.initializer = float_fmt
+        self.string_constants["float_fmt"] = float_fmt_var
+        
+        str_fmt_var = ir.GlobalVariable(self.module, str_fmt.type, name="str_fmt")
+        str_fmt_var.global_constant = True
+        str_fmt_var.initializer = str_fmt
+        self.string_constants["str_fmt"] = str_fmt_var
+        
+        true_str_var = ir.GlobalVariable(self.module, true_str.type, name="true_str")
+        true_str_var.global_constant = True
+        true_str_var.initializer = true_str
+        self.string_constants["true_str"] = true_str_var
+        
+        false_str_var = ir.GlobalVariable(self.module, false_str.type, name="false_str")
+        false_str_var.global_constant = True
+        false_str_var.initializer = false_str
+        self.string_constants["false_str"] = false_str_var
+        
+        # Create type strings
+        number_type = ir.Constant(ir.ArrayType(ir.IntType(8), 8), bytearray("number\n\0".encode()))
+        string_type = ir.Constant(ir.ArrayType(ir.IntType(8), 8), bytearray("string\n\0".encode()))
+        boolean_type = ir.Constant(ir.ArrayType(ir.IntType(8), 9), bytearray("boolean\n\0".encode()))
+        
+        # Create global variables for type strings
+        number_type_var = ir.GlobalVariable(self.module, number_type.type, name="number_type")
+        number_type_var.global_constant = True
+        number_type_var.initializer = number_type
+        self.string_constants["number_type"] = number_type_var
+        
+        string_type_var = ir.GlobalVariable(self.module, string_type.type, name="string_type")
+        string_type_var.global_constant = True
+        string_type_var.initializer = string_type
+        self.string_constants["string_type"] = string_type_var
+        
+        boolean_type_var = ir.GlobalVariable(self.module, boolean_type.type, name="boolean_type")
+        boolean_type_var.global_constant = True
+        boolean_type_var.initializer = boolean_type
+        self.string_constants["boolean_type"] = boolean_type_var
+        
+        # Create input buffer
+        input_buffer = ir.Constant(ir.ArrayType(ir.IntType(8), 1025), [0] * 1025)
+        input_buffer_var = ir.GlobalVariable(self.module, input_buffer.type, name="input_buffer")
+        input_buffer_var.global_constant = True
+        input_buffer_var.initializer = input_buffer
+        self.string_constants["input_buffer"] = input_buffer_var
+        
+        # Create dummy function to avoid empty module
+        dummy_type = ir.FunctionType(ir.IntType(32), [])
+        dummy_func = ir.Function(self.module, dummy_type, name="dummy")
+        block = dummy_func.append_basic_block(name="entry")
+        builder = ir.IRBuilder(block)
+        builder.ret(ir.Constant(ir.IntType(32), 0))
+        
+        # Initialize builder with a dummy block that will be replaced
+        self.builder = ir.IRBuilder(dummy_func.append_basic_block(name="entry"))
+        self.builder.ret(ir.Constant(ir.IntType(32), 0))  # Add proper return
+
     def add_string_constant(self, string, name):
         string_bytes = string.encode("utf8") + b'\0'
         const = ir.Constant(ir.ArrayType(ir.IntType(8), len(string_bytes)), 
@@ -49,15 +106,18 @@ class OpnitCompiler:
         self.string_constants[name] = global_const
 
     def create_string_constant(self, string):
-        self.string_counter += 1
-        name = f"str_{self.string_counter}"
-        string_bytes = string.encode("utf8") + b'\0'
-        const = ir.Constant(ir.ArrayType(ir.IntType(8), len(string_bytes)), 
-                          bytearray(string_bytes))
-        global_const = ir.GlobalVariable(self.module, const.type, name=name)
-        global_const.global_constant = True
-        global_const.initializer = const
-        return global_const
+        # Convert string to bytes and add null terminator
+        string_bytes = string.encode('utf-8') + b'\0'
+        
+        # Create constant array with the string data
+        string_type = ir.ArrayType(ir.IntType(8), len(string_bytes))
+        string_const = ir.GlobalVariable(self.module, string_type, name=f"str_{len(self.string_constants)}")
+        string_const.global_constant = True
+        string_const.initializer = ir.Constant(string_type, list(string_bytes))
+        
+        # Get a pointer to the first element of the array
+        zero = ir.Constant(ir.IntType(32), 0)
+        return self.builder.gep(string_const, [zero, zero], inbounds=True)
 
     def get_type(self, type_name):
         if type_name == 'number':
@@ -80,191 +140,205 @@ class OpnitCompiler:
                     print(f"Compiling statement: {statement}")  # Debug
                     self.compile_statement(statement)
             
-            # Return 0 from main
-            self.builder.ret(ir.Constant(ir.IntType(32), 0))
+            # Get the main function
+            main_func = self.functions.get('main')
+            if main_func is None:
+                raise ValueError("No main function found")
+            
+            # Verify the module
+            llvm.parse_assembly(str(self.module))
             
             print("Generated LLVM IR:")  # Debug
             print(str(self.module))  # Debug
             return str(self.module)
 
-    def compile_statement(self, statement):
-        if statement is None:
+    def compile_statement(self, stmt):
+        if stmt is None:
             return None
-            
-        op = statement[0]
         
-        if op == 'statement':
-            return self.compile_expr(statement[1])
-        elif op == 'function':
-            return self.compile_function(statement[1], statement[2], statement[3], statement[4])
-        elif op == 'return':
-            if self.current_function is None:
-                raise ValueError("Return statement outside of function")
-            value = self.compile_expr(statement[1])
-            self.builder.ret(value)
-            return None
-        return None
+        if stmt[0] == 'statement':
+            return self.compile_expr(stmt[1])
+        elif stmt[0] == 'return':
+            if len(stmt) > 1:
+                retval = self.compile_expr(stmt[1])
+                return self.builder.ret(retval)
+            else:
+                return self.builder.ret_void()
+        elif stmt[0] == 'function':
+            return self.compile_function(stmt)
+        else:
+            raise ValueError(f"Unknown statement type: {stmt[0]}")
 
-    def compile_function(self, name, params, return_type, body):
-        print(f"Compiling function: {name}")  # Debug
+    def compile_function(self, node):
+        print(f"Compiling function: {node}")
+        func_name = node[1]
+        params = node[2]
+        return_type_name = node[3]
+        body = node[4]
+
+        # Determine return type
+        if func_name == 'main':
+            return_type = ir.IntType(32)  # main always returns int
+        elif return_type_name == 'number':
+            return_type = ir.DoubleType()
+        elif return_type_name == 'string':
+            return_type = ir.PointerType(ir.IntType(8))
+        elif return_type_name == 'boolean':
+            return_type = ir.IntType(1)
+        else:
+            raise TypeError(f"Unknown return type: {return_type_name}")
+
         # Create function type
-        param_types = [self.get_type(p[1]) for p in params]
-        return_ty = self.get_type(return_type)
-        func_ty = ir.FunctionType(return_ty, param_types)
+        param_types = []
+        for param_name, param_type in params:
+            if param_type == 'number':
+                param_types.append(ir.DoubleType())
+            elif param_type == 'string':
+                param_types.append(ir.PointerType(ir.IntType(8)))
+            elif param_type == 'boolean':
+                param_types.append(ir.IntType(1))
+            else:
+                raise TypeError(f"Unknown parameter type: {param_type}")
+        
+        func_type = ir.FunctionType(return_type, param_types)
         
         # Create function
-        func = ir.Function(self.module, func_ty, name=name)
-        
-        # Store function
-        self.functions[name] = func
-        
+        if func_name in self.module.globals:
+            func = self.module.get_global(func_name)
+            if not isinstance(func, ir.Function):
+                raise TypeError(f"{func_name} already defined as non-function")
+            if not func.is_declaration:
+                raise TypeError(f"{func_name} already defined")
+        else:
+            func = ir.Function(self.module, func_type, func_name)
+            self.functions[func_name] = func  # Store the function
+
         # Create entry block
-        block = func.append_basic_block(name='entry')
+        block = func.append_basic_block('entry')
+        
+        # Store previous state
         old_builder = self.builder
+        old_vars = self.variables
         old_function = self.current_function
+        
+        # Create new builder and variable context
         self.builder = ir.IRBuilder(block)
+        self.variables = {}
         self.current_function = func
         
-        # Create variable allocations for parameters
-        self.variables = {}
-        for i, (param_name, _) in enumerate(params):
-            alloca = self.builder.alloca(param_types[i], name=param_name)
-            self.builder.store(func.args[i], alloca)
-            self.variables[param_name] = alloca
-        
+        # Allocate parameters
+        for i, ((param_name, _), arg) in enumerate(zip(params, func.args)):
+            var = self.builder.alloca(arg.type, name=param_name)
+            self.builder.store(arg, var)
+            self.variables[param_name] = var
+
         # Compile body
-        print(f"Compiling body of function {name}")  # Debug
-        for statement in body:
-            print(f"Statement: {statement}")  # Debug
-            result = self.compile_statement(statement)
-            print(f"Statement result: {result}")  # Debug
-        
-        # Add a default return if none exists
+        for stmt in body:
+            if stmt is not None:  # Skip None statements
+                if stmt[0] == 'return':
+                    if len(stmt) > 1:
+                        retval = self.compile_expr(stmt[1])
+                        if func_name == 'main':
+                            # Convert float to int for main's return
+                            if isinstance(retval.type, ir.DoubleType):
+                                retval = self.builder.fptosi(retval, ir.IntType(32))
+                        self.builder.ret(retval)
+                    else:
+                        self.builder.ret_void()
+                else:
+                    self.compile_statement(stmt)
+
+        # Add return if function is not terminated
         if not self.builder.block.is_terminated:
-            if return_type == 'number':
+            if isinstance(return_type, ir.VoidType):
+                self.builder.ret_void()
+            elif isinstance(return_type, ir.IntType) and return_type.width == 32:
+                self.builder.ret(ir.Constant(ir.IntType(32), 0))
+            elif isinstance(return_type, ir.DoubleType):
                 self.builder.ret(ir.Constant(ir.DoubleType(), 0.0))
-            elif return_type == 'string':
-                self.builder.ret(ir.Constant(ir.PointerType(ir.IntType(8)), None))
-            elif return_type == 'boolean':
+            elif isinstance(return_type, ir.IntType) and return_type.width == 1:
                 self.builder.ret(ir.Constant(ir.IntType(1), 0))
-        
-        # Restore builder and function
+            else:
+                self.builder.ret(ir.Constant(return_type, None))
+
+        # Restore previous state
         self.builder = old_builder
+        self.variables = old_vars
         self.current_function = old_function
-        self.variables = {}
-        
+
         return func
 
     def compile_expr(self, expr):
-        print(f"Compiling expression: {expr}")  # Debug
-        op = expr[0]
-        
-        if op == 'number':
-            print(f"Creating number constant: {expr[1]}")  # Debug
-            value = ir.Constant(ir.DoubleType(), float(expr[1]))
-            return value
+        if expr[0] == 'variable':
+            var_name = expr[1]
+            if var_name not in self.variables:
+                raise NameError(f"Variable {var_name} not found")
+            var_ptr = self.variables[var_name]
+            return self.builder.load(var_ptr)
+        elif expr[0] == 'number':
+            return ir.Constant(ir.DoubleType(), float(expr[1]))
+        elif expr[0] == 'string':
+            return self.create_string_constant(expr[1])
+        elif expr[0] == 'boolean':
+            return ir.Constant(ir.IntType(1), 1 if expr[1] else 0)
+        elif expr[0] == 'binary':
+            op = expr[1]
+            left = self.compile_expr(expr[2])
+            right = self.compile_expr(expr[3])
             
-        elif op == 'string':
-            print(f"Creating string constant: {expr[1]}")  # Debug
-            string_const = self.create_string_constant(expr[1])
-            ptr = self.builder.bitcast(string_const, ir.PointerType(ir.IntType(8)))
-            return ptr
-            
-        elif op == 'boolean':
-            print(f"Creating boolean constant: {expr[1]}")  # Debug
-            value = ir.Constant(ir.IntType(1), 1 if expr[1] else 0)
-            return value
-            
-        elif op == 'var':
-            print(f"Loading variable: {expr[1]}")  # Debug
-            if expr[1] not in self.variables:
-                raise ValueError(f"Undefined variable: {expr[1]}")
-            ptr = self.variables[expr[1]]
-            return self.builder.load(ptr)
-            
-        elif op in ['add', 'sub', 'mul', 'div']:
-            print(f"Performing operation: {op}")  # Debug
-            left = self.compile_expr(expr[1])
-            right = self.compile_expr(expr[2])
-            print(f"Left type: {left.type}, Right type: {right.type}")  # Debug
-            
-            if op == 'add':
-                if isinstance(left.type, ir.PointerType) or isinstance(right.type, ir.PointerType):
-                    # String concatenation
-                    if expr[1][0] == 'string':
-                        # Left operand is a string literal
-                        result_str = expr[1][1] + (expr[2][1] if expr[2][0] == 'string' else 'World')
-                    elif expr[2][0] == 'string':
-                        # Right operand is a string literal
-                        result_str = (expr[1][1] if expr[1][0] == 'string' else 'Hello') + expr[2][1]
-                    else:
-                        # Both operands are variables or other expressions
-                        result_str = 'Hello, World'  # Default concatenation
-                        
-                    string_const = self.create_string_constant(result_str)
-                    ptr = self.builder.bitcast(string_const, ir.PointerType(ir.IntType(8)))
-                    return ptr
+            if op == '+':
+                if isinstance(left.type, ir.DoubleType) and isinstance(right.type, ir.DoubleType):
+                    return self.builder.fadd(left, right)
+                elif isinstance(left.type, ir.IntType) and isinstance(right.type, ir.IntType):
+                    return self.builder.add(left, right)
                 else:
-                    result = self.builder.fadd(left, right)
-            elif op == 'sub':
-                result = self.builder.fsub(left, right)
-            elif op == 'mul':
-                result = self.builder.fmul(left, right)
-            else:  # div
-                result = self.builder.fdiv(left, right)
-            
-            print(f"Operation result type: {result.type}")  # Debug
-            return result
-            
-        elif op == 'funcall':
-            print(f"Function call: {expr[1]}")  # Debug
+                    raise TypeError(f"Unsupported operand types for +: {left.type} and {right.type}")
+            elif op == '-':
+                return self.builder.fsub(left, right)
+            elif op == '*':
+                return self.builder.fmul(left, right)
+            elif op == '/':
+                return self.builder.fdiv(left, right)
+            else:
+                raise ValueError(f"Unknown binary operator: {op}")
+        elif expr[0] == 'call':
             func_name = expr[1]
             args = [self.compile_expr(arg) for arg in expr[2]]
-            print(f"Function arguments: {[str(arg.type) for arg in args]}")  # Debug
             
-            if func_name in self.functions:
-                print(f"Calling user-defined function: {func_name}")  # Debug
-                result = self.builder.call(self.functions[func_name], args)
-                print(f"Function result type: {result.type}")  # Debug
-                return result
-            elif func_name == 'print':
-                print("Calling print function")  # Debug
-                if len(args) != 1:
-                    raise ValueError("print function takes exactly one argument")
-                arg = args[0]
-                print(f"Print argument type: {arg.type}")  # Debug
-                
-                if isinstance(arg.type, ir.DoubleType):
-                    fmt = self.builder.bitcast(self.string_constants["float_fmt"], 
-                                             ir.PointerType(ir.IntType(8)))
-                    self.builder.call(self.module.get_global("printf"), [fmt, arg])
-                elif isinstance(arg.type, ir.PointerType):
-                    self.builder.call(self.module.get_global("printf"), [arg])
-                else:  # boolean
-                    ptr = self.builder.bitcast(
-                        self.string_constants["true_str" if arg else "false_str"],
-                        ir.PointerType(ir.IntType(8))
-                    )
-                    self.builder.call(self.module.get_global("printf"), [ptr])
+            if func_name == 'print':
+                # Handle print function
+                for arg in args:
+                    if isinstance(arg.type, ir.DoubleType):
+                        fmt = self.module.get_global('float_fmt')
+                        fmt_ptr = self.builder.gep(fmt, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
+                        self.builder.call(self.printf, [fmt_ptr, arg])
+                    elif isinstance(arg.type, ir.IntType) and arg.type.width == 1:
+                        # Boolean case
+                        true_str = self.module.get_global('true_str')
+                        false_str = self.module.get_global('false_str')
+                        fmt = self.module.get_global('str_fmt')
+                        fmt_ptr = self.builder.gep(fmt, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
+                        cond = self.builder.icmp_unsigned('!=', arg, ir.Constant(ir.IntType(1), 0))
+                        str_ptr = self.builder.select(cond, 
+                            self.builder.gep(true_str, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)]),
+                            self.builder.gep(false_str, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)]))
+                        self.builder.call(self.printf, [fmt_ptr, str_ptr])
+                    elif isinstance(arg.type, ir.PointerType):
+                        # String case
+                        fmt = self.module.get_global('str_fmt')
+                        fmt_ptr = self.builder.gep(fmt, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
+                        self.builder.call(self.printf, [fmt_ptr, arg])
+                    else:
+                        raise TypeError(f"Unsupported type for print: {arg.type}")
                 return None
-            elif func_name == 'gettype':
-                if len(args) != 1:
-                    raise ValueError("gettype function takes exactly one argument")
-                if isinstance(args[0].type, ir.DoubleType):
-                    ptr = self.builder.bitcast(self.string_constants["number_type"], 
-                                             ir.PointerType(ir.IntType(8)))
-                elif isinstance(args[0].type, ir.PointerType):
-                    ptr = self.builder.bitcast(self.string_constants["string_type"], 
-                                             ir.PointerType(ir.IntType(8)))
-                else:  # boolean
-                    ptr = self.builder.bitcast(self.string_constants["boolean_type"], 
-                                             ir.PointerType(ir.IntType(8)))
-                self.builder.call(self.module.get_global("printf"), [ptr])
-                return ptr
             else:
-                raise ValueError(f"Unknown function: {func_name}")
-                
-        raise ValueError(f"Unsupported operation: {op}")
+                # Handle other function calls
+                func = self.module.get_global(func_name)
+                if not func:
+                    raise NameError(f"Function {func_name} not found")
+                return self.builder.call(func, args)
+        else:
+            raise ValueError(f"Unknown expression type: {expr[0]}")
 
     def get_string_value(self, ptr):
         # This is a helper method to get string value from a pointer

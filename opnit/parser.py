@@ -41,13 +41,13 @@ class OpnitParser(Parser):
     def statement(self, p):
         return None
 
-    @_('FUNCTION ID LPAREN param_list RPAREN ARROW type LBRACE statements RBRACE')
+    @_('FUNCTION ID LPAREN param_list RPAREN ARROW TYPE LBRACE statements RBRACE')
     def function_def(self, p):
-        return ('function', p.ID, p.param_list, p.type, p.statements)
+        return ('function', p.ID, p.param_list, p.TYPE, p.statements)
 
-    @_('FUNCTION ID LPAREN RPAREN ARROW type LBRACE statements RBRACE')
+    @_('FUNCTION ID LPAREN RPAREN ARROW TYPE LBRACE statements RBRACE')
     def function_def(self, p):
-        return ('function', p.ID, [], p.type, p.statements)
+        return ('function', p.ID, [], p.TYPE, p.statements)
 
     @_('param')
     def param_list(self, p):
@@ -57,13 +57,9 @@ class OpnitParser(Parser):
     def param_list(self, p):
         return p.param_list + [p.param]
 
-    @_('ID COLON type')
+    @_('ID COLON TYPE')
     def param(self, p):
-        return (p.ID, p.type)
-
-    @_('ID')
-    def type(self, p):
-        return p.ID
+        return (p.ID, p.TYPE)
 
     @_('RETURN expr SEMI')
     def statement(self, p):
@@ -73,21 +69,29 @@ class OpnitParser(Parser):
     def statement(self, p):
         return ('return', p.expr)
 
+    @_('VAR ID ASSIGN expr SEMI')
+    def statement(self, p):
+        return ('statement', ('assignment', p.ID, p.expr))
+
+    @_('VAR ID ASSIGN expr NEWLINE')
+    def statement(self, p):
+        return ('statement', ('assignment', p.ID, p.expr))
+
     @_('expr PLUS expr')
     def expr(self, p):
-        return ('add', p.expr0, p.expr1)
+        return ('binary', '+', p.expr0, p.expr1)
 
     @_('expr MINUS expr')
     def expr(self, p):
-        return ('sub', p.expr0, p.expr1)
+        return ('binary', '-', p.expr0, p.expr1)
 
     @_('expr TIMES expr')
     def expr(self, p):
-        return ('mul', p.expr0, p.expr1)
+        return ('binary', '*', p.expr0, p.expr1)
 
     @_('expr DIVIDE expr')
     def expr(self, p):
-        return ('div', p.expr0, p.expr1)
+        return ('binary', '/', p.expr0, p.expr1)
 
     @_('NUMBER')
     def expr(self, p):
@@ -99,31 +103,27 @@ class OpnitParser(Parser):
 
     @_('TRUE')
     def expr(self, p):
-        return ('boolean', True)
+        return ('boolean', 'true')
 
     @_('FALSE')
     def expr(self, p):
-        return ('boolean', False)
+        return ('boolean', 'false')
 
     @_('ID LPAREN expr RPAREN')
     def expr(self, p):
-        return ('funcall', p.ID, [p.expr])
+        return ('call', p.ID, [p.expr])
 
     @_('ID LPAREN expr COMMA expr RPAREN')
     def expr(self, p):
-        return ('funcall', p.ID, [p.expr0, p.expr1])
-
-    @_('ID LPAREN expr COMMA expr COMMA expr RPAREN')
-    def expr(self, p):
-        return ('funcall', p.ID, [p.expr0, p.expr1, p.expr2])
+        return ('call', p.ID, [p.expr0, p.expr1])
 
     @_('ID LPAREN RPAREN')
     def expr(self, p):
-        return ('funcall', p.ID, [])
+        return ('call', p.ID, [])
 
     @_('ID')
     def expr(self, p):
-        return ('var', p.ID)
+        return ('variable', p.ID)
 
     def error(self, token):
         if token:

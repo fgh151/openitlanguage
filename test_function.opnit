@@ -1,0 +1,10 @@
+# Test function with type annotations
+function add(x: number, y: number) -> number {
+    return x + y;
+}
+
+function main() -> number {
+    print("Testing add function...\n");
+    print(add(5, 3));
+    return 0;
+} 

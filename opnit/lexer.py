@@ -8,11 +8,13 @@ class OpnitLexer(Lexer):
         ID,
         TRUE, FALSE,
         NEWLINE,
-        FUNCTION, RETURN,
+        FUNCTION, RETURN, VAR,
         LBRACE, RBRACE,
-        ARROW,
         COLON,
-        SEMI
+        SEMI,
+        ARROW,  # Added for function return type
+        TYPE,   # Added for type annotations
+        ASSIGN  # Added for variable assignment
     }
 
     # Ignored characters
@@ -31,6 +33,7 @@ class OpnitLexer(Lexer):
     RBRACE = r'\}'
     COLON = r':'
     SEMI = r';'
+    ASSIGN = r'='
     NEWLINE = r'\n+'
 
     # Keywords
@@ -39,6 +42,11 @@ class OpnitLexer(Lexer):
     ID['false'] = FALSE
     ID['function'] = FUNCTION
     ID['return'] = RETURN
+    ID['var'] = VAR
+    ID['number'] = TYPE
+    ID['string'] = TYPE
+    ID['boolean'] = TYPE
+    ID['any'] = TYPE
 
     # Special handling for comments
     @_(r'\#.*')

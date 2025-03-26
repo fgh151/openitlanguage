@@ -1,20 +1,20 @@
 # Test basic function with addition
-function add(x: number, y: number) -> number {
+function add(x: number, y: number): number {
     return x + y;
 }
 
 # Test function with string concatenation
-function greet(name: string) -> string {
+function greet(name: string): string {
     return "Hello, " + name;
 }
 
 # Test function with no parameters
-function get_pi() -> number {
+function get_pi(): number {
     return 3.14159;
 }
 
 # Test nested function calls
-function multiply_and_add(a: number, b: number, c: number) -> number {
+function multiply_and_add(a: number, b: number, c: number): number {
     return add(a * b, c);
 }
 

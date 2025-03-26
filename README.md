@@ -15,12 +15,12 @@ Opnit is a simple yet powerful programming language that supports basic arithmet
 Functions are defined using the `function` keyword, followed by:
 - Function name
 - Parameter list with types
-- Return type (after `->`)
+- Return type (after `:`)
 - Function body in curly braces
 
 Example:
 ```opnit
-function add(x: number, y: number) -> number {
+function add(x: number, y: number) : number {
     return x + y;
 }
 ```
@@ -32,19 +32,19 @@ function add(x: number, y: number) -> number {
 
 Example:
 ```opnit
-function greet(name: string) -> string {
+function greet(name: string) : string {
     return "Hello, " + name;
 }
 ```
 
 #### Return Values
-- Functions must specify a return type using `->` after the parameter list
+- Functions must specify a return type using `:` after the parameter list
 - The `return` statement is used to return values
 - Return type must match the declared type
 
 Example:
 ```opnit
-function get_pi() -> number {
+function get_pi(): number {
     return 3.14159;
 }
 ```
@@ -65,7 +65,7 @@ print(get_pi());            # Outputs: 3.14159
 Functions can be nested and used in expressions:
 
 ```opnit
-function multiply_and_add(a: number, b: number, c: number) -> number {
+function multiply_and_add(a: number, b: number, c: number) : number {
     return add(a * b, c);
 }
 
@@ -114,12 +114,12 @@ print("Hello, " + "World");  # Outputs: Hello, World
 
 ```opnit
 # Function to calculate area of a rectangle
-function area(width: number, height: number) -> number {
+function area(width: number, height: number) : number {
     return width * height;
 }
 
 # Function to create a greeting
-function personalized_greeting(name: string) -> string {
+function personalized_greeting(name: string) : string {
     return "Welcome, " + name + "!";
 }
 

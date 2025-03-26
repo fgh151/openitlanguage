@@ -344,4 +344,41 @@ class OpnitCompiler:
         # This is a helper method to get string value from a pointer
         # In a real implementation, this would need to handle string extraction from LLVM IR
         # For now, we'll just return a placeholder
-        return "" 
+        return ""
+
+    def compile_to_binary(self, output_file):
+        """Compile the LLVM IR to a binary executable file."""
+        # Create a target machine
+        target = llvm.Target.from_default_triple()
+        target_machine = target.create_target_machine()
+        
+        # Create a module from the LLVM IR
+        mod = llvm.parse_assembly(str(self.module))
+        mod.verify()
+        
+        # Optimize the module
+        pmb = llvm.create_pass_manager_builder()
+        pmb.opt_level = 2  # Optimization level
+        pm = llvm.create_module_pass_manager()
+        pmb.populate(pm)
+        pm.run(mod)
+        
+        # Write the object file
+        with open(f"{output_file}.o", "wb") as o:
+            o.write(target_machine.emit_object(mod))
+        
+        # Link the object file to create an executable
+        import subprocess
+        import sys
+        
+        if sys.platform == 'darwin':  # macOS
+            subprocess.run(['clang', f'{output_file}.o', '-o', output_file])
+        else:  # Linux and others
+            subprocess.run(['cc', f'{output_file}.o', '-o', output_file])
+        
+        # Make the binary executable
+        import os
+        os.chmod(output_file, 0o755)
+        
+        # Clean up the object file
+        os.remove(f"{output_file}.o") 

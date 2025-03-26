@@ -104,11 +104,40 @@ gettype(true);      # Outputs: boolean
 print("Hello, " + "World");  # Outputs: Hello, World
 ```
 
+## Installation
+
+1. Make sure you have Python 3.6+ installed
+2. Install the required dependencies:
+```bash
+pip install llvmlite
+```
+3. Make sure you have a C compiler installed:
+   - On macOS: Install Xcode Command Line Tools (`xcode-select --install`)
+   - On Linux: Install GCC (`sudo apt-get install gcc` on Ubuntu/Debian)
+
 ## Usage
 
-1. Create a file with `.opnit` extension
-2. Write your Opnit code
-3. Run using: `python3 -m opnit your_file.opnit`
+### Running Programs
+
+There are three ways to run Opnit programs:
+
+1. **Direct Execution** - Run the program directly without generating a binary:
+```bash
+python -m opnit your_program.opnit
+```
+
+2. **Compile to Binary** - Create a native executable:
+```bash
+python -m opnit your_program.opnit -o output_binary
+./output_binary  # Run the compiled program
+```
+
+3. **View LLVM IR** - See the generated LLVM intermediate representation:
+```bash
+python -m opnit your_program.opnit --emit-llvm
+```
+
+If you don't specify an output name with `-o`, the compiler will use the input filename without the `.opnit` extension.
 
 ## Example Program
 

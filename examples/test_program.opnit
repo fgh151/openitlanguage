@@ -1,8 +1,8 @@
-# Simple test of getline functionality
+//# Simple test of getline functionality
 function main(): number {
-    var buffer = "";  # Will use a default buffer size
+    var buffer = "";  // Will use a default buffer size
     print("Enter your name: ");
-    getline(buffer, 100);  # Read up to 100 characters
+    getline(buffer, 100);  // Read up to 100 characters
     print("Hello, " + buffer + "!\n");
     return 0;
 }

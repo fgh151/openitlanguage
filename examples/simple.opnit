@@ -1,4 +1,4 @@
-print(42)
-print("Hello")
-print(true)
-print(2 + 3) 
+print(42);
+print("Hello");
+print(true);
+print(2 + 3);

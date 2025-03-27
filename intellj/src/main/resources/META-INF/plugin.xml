@@ -1,0 +1,26 @@
+<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<idea-plugin>
+    <id>ru.openitstudio.language</id>
+    <name>OpnItStudio Language</name>
+    <vendor>OpenITStudio</vendor>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileType
+                name="Opnit File"
+                implementationClass="ru.openitstudio.language.OpnitFileType"
+                fieldName="INSTANCE"
+                language="Opnit"
+                extensions="opnit"/>
+        <lang.parserDefinition
+                language="Opnit"
+                implementationClass="ru.openitstudio.language.OpnitParserDefinition"/>
+        <lang.syntaxHighlighterFactory
+                language="Opnit"
+                implementationClass="ru.openitstudio.language.OpnitSyntaxHighlighterFactory"/>
+        <completion.contributor
+                language="Opnit"
+                implementationClass="ru.openitstudio.language.OpnitCompletionContributor"/>
+    </extensions>
+</idea-plugin> 

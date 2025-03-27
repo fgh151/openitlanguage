@@ -95,7 +95,7 @@
                 },
                 {
                     "name": "keyword.operator.type.opnit",
-                    "match": "->"
+                    "match": ":"
                 }
             ]
         },

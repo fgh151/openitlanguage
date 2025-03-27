@@ -8,7 +8,7 @@ This extension provides syntax highlighting support for the Opnit programming la
   - Keywords (`function`, `return`)
   - Built-in functions (`print`, `gettype`)
   - Types (`number`, `string`, `boolean`)
-  - Operators (`+`, `-`, `*`, `/`, `->`)
+  - Operators (`+`, `-`, `*`, `/`, `:`)
   - String literals
   - Numeric literals
   - Comments
@@ -31,12 +31,12 @@ This extension provides syntax highlighting support for the Opnit programming la
 
 ```opnit
 # Function definition
-function add(x: number, y: number) -> number {
+function add(x: number, y: number): number {
     return x + y;
 }
 
 # String concatenation
-function greet(name: string) -> string {
+function greet(name: string): string {
     return "Hello, " + name;
 }
 

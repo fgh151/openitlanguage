@@ -8,6 +8,41 @@ Opnit is a simple yet powerful programming language that supports basic arithmet
 - `number`: Floating-point numbers (e.g., `42`, `3.14`)
 - `string`: Text strings (e.g., `"Hello, World"`)
 - `boolean`: True/false values (e.g., `true`, `false`)
+- `array`: Ordered collections of values (e.g., `[1, 2, 3]`, `["hello", "world"]`)
+
+### Arrays
+
+#### Array Declaration and Initialization
+Arrays can be declared and initialized using square brackets:
+```opnit
+var numbers = [1, 2, 3];           # Array of numbers
+var words = ["hello", "world"];     # Array of strings
+var empty = [];                     # Empty array
+```
+
+#### Array Access
+Elements in an array can be accessed using zero-based indexing:
+```opnit
+var numbers = [1, 2, 3];
+print(numbers[0]);     # Outputs: 1.0 (first element)
+print(numbers[2]);     # Outputs: 3.0 (last element)
+```
+
+#### Array Length
+Use the `len()` function to get the number of elements in an array:
+```opnit
+var numbers = [1, 2, 3, 4, 5];
+var size = len(numbers);    # Returns: 5
+```
+
+#### Array Parameters in Functions
+Functions can accept arrays as parameters:
+```opnit
+function sum_array(numbers: number[]) : number {
+    // Array processing code here
+    return 0;
+}
+```
 
 ### Functions
 
@@ -139,8 +174,9 @@ python -m opnit your_program.opnit --emit-llvm
 
 If you don't specify an output name with `-o`, the compiler will use the input filename without the `.opnit` extension.
 
-## Example Program
+## Example Programs
 
+### Basic Functions Example
 ```opnit
 # Function to calculate area of a rectangle
 function area(width: number, height: number) : number {
@@ -155,6 +191,29 @@ function personalized_greeting(name: string) : string {
 # Using the functions
 print(area(5, 3));                    # Outputs: 15.0
 print(personalized_greeting("Alice")); # Outputs: Welcome, Alice!
+```
+
+### Array Operations Example
+```opnit
+# Function to calculate the sum of array elements
+function array_sum(numbers: number[]) : number {
+    var sum = 0;
+    var i = 0;
+    while (i < len(numbers)) {
+        sum = sum + numbers[i];
+        i = i + 1;
+    }
+    return sum;
+}
+
+# Using arrays
+var numbers = [1, 2, 3, 4, 5];
+print(numbers[0]);           # Outputs: 1.0 (first element)
+print(array_sum(numbers));   # Outputs: 15.0 (sum of all elements)
+
+var words = ["hello", "world"];
+print(words[1]);            # Outputs: world
+print(len(words));          # Outputs: 2
 ```
 
 ## Notes

@@ -13,4 +13,7 @@ public interface OpnitStatement_ extends PsiElement {
   @Nullable
   OpnitReturnStatement getReturnStatement();
 
+  @Nullable
+  OpnitVarDeclaration getVarDeclaration();
+
 }

@@ -7,6 +7,14 @@ import com.intellij.psi.PsiElement;
 
 public class OpnitVisitor extends PsiElementVisitor {
 
+  public void visitArrayAccess(@NotNull OpnitArrayAccess o) {
+    visitPsiElement(o);
+  }
+
+  public void visitArrayLiteral(@NotNull OpnitArrayLiteral o) {
+    visitPsiElement(o);
+  }
+
   public void visitBinaryExpr(@NotNull OpnitBinaryExpr o) {
     visitPsiElement(o);
   }
@@ -48,6 +56,10 @@ public class OpnitVisitor extends PsiElementVisitor {
   }
 
   public void visitType(@NotNull OpnitType o) {
+    visitPsiElement(o);
+  }
+
+  public void visitVarDeclaration(@NotNull OpnitVarDeclaration o) {
     visitPsiElement(o);
   }
 

@@ -128,6 +128,12 @@ class OpnitCompiler:
             return ir.IntType(1)
         elif type_name == 'any':
             return ir.PointerType(ir.IntType(8))
+        elif type_name.endswith('[]'):  # Array type
+            element_type = self.get_type(type_name[:-2])
+            return ir.LiteralStructType([
+                ir.PointerType(element_type),  # Data pointer
+                ir.IntType(32)                 # Length
+            ])
         else:
             raise ValueError(f"Unknown type: {type_name}")
 
@@ -166,6 +172,29 @@ class OpnitCompiler:
                 return self.builder.ret_void()
         elif stmt[0] == 'function':
             return self.compile_function(stmt)
+        elif stmt[0] == 'while':
+            # Create the basic blocks for the while loop
+            cond_block = self.current_function.append_basic_block('while_cond')
+            body_block = self.current_function.append_basic_block('while_body')
+            end_block = self.current_function.append_basic_block('while_end')
+            
+            # Jump to the condition block
+            self.builder.branch(cond_block)
+            
+            # Emit the condition code
+            self.builder.position_at_end(cond_block)
+            cond = self.compile_expr(stmt[1])
+            self.builder.cbranch(cond, body_block, end_block)
+            
+            # Emit the body code
+            self.builder.position_at_end(body_block)
+            for body_stmt in stmt[2]:
+                self.compile_statement(body_stmt)
+            self.builder.branch(cond_block)
+            
+            # Continue building from end block
+            self.builder.position_at_end(end_block)
+            return None
         else:
             raise ValueError(f"Unknown statement type: {stmt[0]}")
 
@@ -269,76 +298,57 @@ class OpnitCompiler:
         return func
 
     def compile_expr(self, expr):
-        if expr[0] == 'variable':
-            var_name = expr[1]
-            if var_name not in self.variables:
-                raise NameError(f"Variable {var_name} not found")
-            var_ptr = self.variables[var_name]
-            return self.builder.load(var_ptr)
-        elif expr[0] == 'number':
+        if expr[0] == 'number':
             return ir.Constant(ir.DoubleType(), float(expr[1]))
         elif expr[0] == 'string':
             return self.create_string_constant(expr[1])
-        elif expr[0] == 'boolean':
-            return ir.Constant(ir.IntType(1), 1 if expr[1] else 0)
-        elif expr[0] == 'binary':
-            op = expr[1]
-            left = self.compile_expr(expr[2])
-            right = self.compile_expr(expr[3])
-            
-            if op == '+':
-                if isinstance(left.type, ir.DoubleType) and isinstance(right.type, ir.DoubleType):
-                    return self.builder.fadd(left, right)
-                elif isinstance(left.type, ir.IntType) and isinstance(right.type, ir.IntType):
-                    return self.builder.add(left, right)
+        elif expr[0] == 'variable':
+            var_ptr = self.variables[expr[1]]
+            if isinstance(var_ptr.type.pointee, ir.ArrayType):
+                return var_ptr
+            return self.builder.load(var_ptr)
+        elif expr[0] == 'assignment':
+            var_name = expr[1]
+            value = self.compile_expr(expr[2])
+            if var_name not in self.variables:
+                if expr[2][0] == 'array_literal':
+                    # Handle array literal assignment
+                    elements = expr[2][1]
+                    array_ptr = self.create_array(ir.DoubleType(), len(elements))
+                    self.variables[var_name] = array_ptr
+                    for i, element in enumerate(elements):
+                        element_val = self.compile_expr(element)
+                        element_ptr = self.builder.gep(array_ptr, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), i)])
+                        self.builder.store(element_val, element_ptr)
+                    return array_ptr
                 else:
-                    raise TypeError(f"Unsupported operand types for +: {left.type} and {right.type}")
-            elif op == '-':
-                return self.builder.fsub(left, right)
-            elif op == '*':
-                return self.builder.fmul(left, right)
-            elif op == '/':
-                return self.builder.fdiv(left, right)
-            else:
-                raise ValueError(f"Unknown binary operator: {op}")
-        elif expr[0] == 'call':
-            func_name = expr[1]
-            args = [self.compile_expr(arg) for arg in expr[2]]
-            
-            if func_name == 'print':
-                # Handle print function
-                for arg in args:
-                    if isinstance(arg.type, ir.DoubleType):
-                        fmt = self.module.get_global('float_fmt')
-                        fmt_ptr = self.builder.gep(fmt, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
-                        self.builder.call(self.printf, [fmt_ptr, arg])
-                    elif isinstance(arg.type, ir.IntType) and arg.type.width == 1:
-                        # Boolean case
-                        true_str = self.module.get_global('true_str')
-                        false_str = self.module.get_global('false_str')
-                        fmt = self.module.get_global('str_fmt')
-                        fmt_ptr = self.builder.gep(fmt, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
-                        cond = self.builder.icmp_unsigned('!=', arg, ir.Constant(ir.IntType(1), 0))
-                        str_ptr = self.builder.select(cond, 
-                            self.builder.gep(true_str, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)]),
-                            self.builder.gep(false_str, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)]))
-                        self.builder.call(self.printf, [fmt_ptr, str_ptr])
-                    elif isinstance(arg.type, ir.PointerType):
-                        # String case
-                        fmt = self.module.get_global('str_fmt')
-                        fmt_ptr = self.builder.gep(fmt, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
-                        self.builder.call(self.printf, [fmt_ptr, arg])
-                    else:
-                        raise TypeError(f"Unsupported type for print: {arg.type}")
+                    ptr = self.builder.alloca(value.type)
+                    self.variables[var_name] = ptr
+            self.builder.store(value, self.variables[var_name])
+            return value
+        elif expr[0] == 'array_literal':
+            elements = [self.compile_expr(e) for e in expr[1]]
+            if not elements:
                 return None
+            array_type = self.get_array_type(elements[0].type, len(elements))
+            array_ptr = self.builder.alloca(array_type)
+            for i, element in enumerate(elements):
+                element_ptr = self.builder.gep(array_ptr, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), i)])
+                self.builder.store(element, element_ptr)
+            return array_ptr
+        elif expr[0] == 'array_access':
+            array = self.compile_expr(expr[1])
+            index = self.compile_expr(expr[2])
+            if isinstance(index.type, ir.DoubleType):
+                index = self.builder.fptosi(index, ir.IntType(32))
+            element_ptr = self.builder.gep(array, [ir.Constant(ir.IntType(32), 0), index])
+            return self.builder.load(element_ptr)
+        elif expr[0] == 'call':
+            if expr[1] == 'print':
+                return self.compile_print(expr[2])
             else:
-                # Handle other function calls
-                func = self.module.get_global(func_name)
-                if not func:
-                    raise NameError(f"Function {func_name} not found")
-                return self.builder.call(func, args)
-        else:
-            raise ValueError(f"Unknown expression type: {expr[0]}")
+                return None
+        return None
 
     def get_string_value(self, ptr):
         # This is a helper method to get string value from a pointer
@@ -381,4 +391,88 @@ class OpnitCompiler:
         os.chmod(output_file, 0o755)
         
         # Clean up the object file
-        os.remove(f"{output_file}.o") 
+        os.remove(f"{output_file}.o")
+
+    def create_array(self, elements, element_type):
+        """Create an array from a list of elements."""
+        # Create array struct type
+        array_type = ir.LiteralStructType([
+            ir.PointerType(element_type),  # Data pointer
+            ir.IntType(32)                 # Length
+        ])
+        
+        # Allocate array struct
+        array_struct = self.builder.alloca(array_type)
+        
+        # Allocate array data
+        length = len(elements)
+        array_data = self.builder.alloca(element_type, size=ir.Constant(ir.IntType(32), length))
+        
+        # Store elements
+        for i, element in enumerate(elements):
+            ptr = self.builder.gep(array_data, [ir.Constant(ir.IntType(32), i)])
+            self.builder.store(element, ptr)
+        
+        # Store array data pointer and length
+        data_ptr = self.builder.gep(array_struct, [
+            ir.Constant(ir.IntType(32), 0),
+            ir.Constant(ir.IntType(32), 0)
+        ])
+        self.builder.store(array_data, data_ptr)
+        
+        length_ptr = self.builder.gep(array_struct, [
+            ir.Constant(ir.IntType(32), 0),
+            ir.Constant(ir.IntType(32), 1)
+        ])
+        self.builder.store(ir.Constant(ir.IntType(32), length), length_ptr)
+        
+        return array_struct
+
+    def get_array_element(self, array_ptr, index):
+        """Get an element from an array at the given index."""
+        # Load array data pointer
+        data_ptr = self.builder.gep(array_ptr, [
+            ir.Constant(ir.IntType(32), 0),
+            ir.Constant(ir.IntType(32), 0)
+        ])
+        data = self.builder.load(data_ptr)
+        
+        # Load array length
+        length_ptr = self.builder.gep(array_ptr, [
+            ir.Constant(ir.IntType(32), 0),
+            ir.Constant(ir.IntType(32), 1)
+        ])
+        length = self.builder.load(length_ptr)
+        
+        # Check bounds
+        is_in_bounds = self.builder.icmp_unsigned('<', index, length)
+        with self.builder.if_else(is_in_bounds) as (then, otherwise):
+            with then:
+                # Get element pointer and load value
+                element_ptr = self.builder.gep(data, [index])
+                result = self.builder.load(element_ptr)
+                self.builder.ret(result)
+            with otherwise:
+                # Handle out of bounds error
+                error_msg = self.create_string_constant("Array index out of bounds")
+                self.builder.call(self.printf, [error_msg])
+                self.builder.ret(ir.Constant(data.type.pointee, None))
+
+    def get_array_type(self, element_type, size):
+        return ir.ArrayType(element_type, size)
+
+    def create_array(self, element_type, length):
+        array_type = self.get_array_type(element_type, length)
+        array_ptr = self.builder.alloca(array_type)
+        return array_ptr
+
+    def compile_print(self, args):
+        if not isinstance(args, list):
+            args = [args]
+        for arg in args:
+            value = self.compile_expr(arg)
+            if isinstance(value.type, ir.DoubleType):
+                fmt = self.module.get_global("float_fmt")
+                fmt_ptr = self.builder.gep(fmt, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
+                self.builder.call(self.printf, [fmt_ptr, value])
+        return None 

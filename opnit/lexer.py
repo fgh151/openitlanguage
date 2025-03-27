@@ -5,32 +5,35 @@ class OpnitLexer(Lexer):
         NUMBER, STRING,
         PLUS, MINUS, TIMES, DIVIDE,
         LPAREN, RPAREN, COMMA,
+        LBRACKET, RBRACKET,  # Array brackets
+        LBRACE, RBRACE,
         ID,
         TRUE, FALSE,
         NEWLINE,
         FUNCTION, RETURN, VAR,
-        LBRACE, RBRACE,
         COLON,
         SEMI,
-        ARROW,  # Added for function return type
         TYPE,   # Added for type annotations
-        ASSIGN  # Added for variable assignment
+        ASSIGN,  # Added for variable assignment
+        WHILE  # Add WHILE token
     }
 
     # Ignored characters
     ignore = ' \t'
+    ignore_comment = r'//.*'  # Line comments
 
     # Tokens
-    ARROW = r'->'  # Must come before MINUS
     PLUS = r'\+'
     MINUS = r'-'
     TIMES = r'\*'
     DIVIDE = r'/'
     LPAREN = r'\('
     RPAREN = r'\)'
-    COMMA = r','
+    LBRACKET = r'\['
+    RBRACKET = r'\]'
     LBRACE = r'\{'
     RBRACE = r'\}'
+    COMMA = r','
     COLON = r':'
     SEMI = r';'
     ASSIGN = r'='
@@ -43,13 +46,14 @@ class OpnitLexer(Lexer):
     ID['function'] = FUNCTION
     ID['return'] = RETURN
     ID['var'] = VAR
+    ID['while'] = WHILE
     ID['number'] = TYPE
     ID['string'] = TYPE
     ID['boolean'] = TYPE
     ID['any'] = TYPE
 
     # Special handling for comments
-    @_(r'\#.*')
+    @_(r'//.*')
     def COMMENT(self, t):
         pass
 

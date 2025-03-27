@@ -36,6 +36,75 @@ public class OpnitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
+  // ref_expr LBRACKET expr RBRACKET
+  public static boolean array_access(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "array_access")) return false;
+    if (!nextTokenIs(builder_, IDENTIFIER)) return false;
+    boolean result_;
+    Marker marker_ = enter_section_(builder_);
+    result_ = ref_expr(builder_, level_ + 1);
+    result_ = result_ && consumeToken(builder_, LBRACKET);
+    result_ = result_ && expr(builder_, level_ + 1);
+    result_ = result_ && consumeToken(builder_, RBRACKET);
+    exit_section_(builder_, marker_, ARRAY_ACCESS, result_);
+    return result_;
+  }
+
+  /* ********************************************************** */
+  // LBRACKET (expr (COMMA expr)*)? RBRACKET
+  public static boolean array_literal(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "array_literal")) return false;
+    if (!nextTokenIs(builder_, LBRACKET)) return false;
+    boolean result_;
+    Marker marker_ = enter_section_(builder_);
+    result_ = consumeToken(builder_, LBRACKET);
+    result_ = result_ && array_literal_1(builder_, level_ + 1);
+    result_ = result_ && consumeToken(builder_, RBRACKET);
+    exit_section_(builder_, marker_, ARRAY_LITERAL, result_);
+    return result_;
+  }
+
+  // (expr (COMMA expr)*)?
+  private static boolean array_literal_1(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "array_literal_1")) return false;
+    array_literal_1_0(builder_, level_ + 1);
+    return true;
+  }
+
+  // expr (COMMA expr)*
+  private static boolean array_literal_1_0(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "array_literal_1_0")) return false;
+    boolean result_;
+    Marker marker_ = enter_section_(builder_);
+    result_ = expr(builder_, level_ + 1);
+    result_ = result_ && array_literal_1_0_1(builder_, level_ + 1);
+    exit_section_(builder_, marker_, null, result_);
+    return result_;
+  }
+
+  // (COMMA expr)*
+  private static boolean array_literal_1_0_1(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "array_literal_1_0_1")) return false;
+    while (true) {
+      int pos_ = current_position_(builder_);
+      if (!array_literal_1_0_1_0(builder_, level_ + 1)) break;
+      if (!empty_element_parsed_guard_(builder_, "array_literal_1_0_1", pos_)) break;
+    }
+    return true;
+  }
+
+  // COMMA expr
+  private static boolean array_literal_1_0_1_0(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "array_literal_1_0_1_0")) return false;
+    boolean result_;
+    Marker marker_ = enter_section_(builder_);
+    result_ = consumeToken(builder_, COMMA);
+    result_ = result_ && expr(builder_, level_ + 1);
+    exit_section_(builder_, marker_, null, result_);
+    return result_;
+  }
+
+  /* ********************************************************** */
   // expr (PLUS | MINUS | MULTIPLY | DIVIDE) expr
   public static boolean binary_expr(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "binary_expr")) return false;
@@ -114,14 +183,16 @@ public class OpnitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // binary_expr | call_expr | ref_expr | literal
+  // binary_expr | array_access | call_expr | ref_expr | array_literal | literal
   public static boolean expr(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "expr")) return false;
     boolean result_;
     Marker marker_ = enter_section_(builder_, level_, _NONE_, EXPR, "<expr>");
     result_ = binary_expr(builder_, level_ + 1);
+    if (!result_) result_ = array_access(builder_, level_ + 1);
     if (!result_) result_ = call_expr(builder_, level_ + 1);
     if (!result_) result_ = ref_expr(builder_, level_ + 1);
+    if (!result_) result_ = array_literal(builder_, level_ + 1);
     if (!result_) result_ = literal(builder_, level_ + 1);
     exit_section_(builder_, level_, marker_, result_, false, null);
     return result_;
@@ -273,7 +344,7 @@ public class OpnitParser implements PsiParser, LightPsiParser {
   }
 
   /* ********************************************************** */
-  // (return_statement | expr) SEMICOLON
+  // (var_declaration | return_statement | expr) SEMICOLON
   public static boolean statement_(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "statement_")) return false;
     boolean result_;
@@ -284,11 +355,12 @@ public class OpnitParser implements PsiParser, LightPsiParser {
     return result_;
   }
 
-  // return_statement | expr
+  // var_declaration | return_statement | expr
   private static boolean statement__0(PsiBuilder builder_, int level_) {
     if (!recursion_guard_(builder_, level_, "statement__0")) return false;
     boolean result_;
-    result_ = return_statement(builder_, level_ + 1);
+    result_ = var_declaration(builder_, level_ + 1);
+    if (!result_) result_ = return_statement(builder_, level_ + 1);
     if (!result_) result_ = expr(builder_, level_ + 1);
     return result_;
   }
@@ -304,6 +376,19 @@ public class OpnitParser implements PsiParser, LightPsiParser {
     if (!result_) result_ = consumeToken(builder_, BOOLEAN_TYPE);
     if (!result_) result_ = consumeToken(builder_, ANY_TYPE);
     exit_section_(builder_, level_, marker_, result_, false, null);
+    return result_;
+  }
+
+  /* ********************************************************** */
+  // VAR IDENTIFIER ASSIGN expr
+  public static boolean var_declaration(PsiBuilder builder_, int level_) {
+    if (!recursion_guard_(builder_, level_, "var_declaration")) return false;
+    if (!nextTokenIs(builder_, VAR)) return false;
+    boolean result_;
+    Marker marker_ = enter_section_(builder_);
+    result_ = consumeTokens(builder_, 0, VAR, IDENTIFIER, ASSIGN);
+    result_ = result_ && expr(builder_, level_ + 1);
+    exit_section_(builder_, marker_, VAR_DECLARATION, result_);
     return result_;
   }
 

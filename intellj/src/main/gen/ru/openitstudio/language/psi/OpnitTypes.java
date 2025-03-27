@@ -8,6 +8,8 @@ import ru.openitstudio.language.psi.impl.*;
 
 public interface OpnitTypes {
 
+  IElementType ARRAY_ACCESS = new OpnitElementType("ARRAY_ACCESS");
+  IElementType ARRAY_LITERAL = new OpnitElementType("ARRAY_LITERAL");
   IElementType BINARY_EXPR = new OpnitElementType("BINARY_EXPR");
   IElementType CALL_EXPR = new OpnitElementType("CALL_EXPR");
   IElementType EXPR = new OpnitElementType("EXPR");
@@ -19,8 +21,10 @@ public interface OpnitTypes {
   IElementType RETURN_STATEMENT = new OpnitElementType("RETURN_STATEMENT");
   IElementType STATEMENT_ = new OpnitElementType("STATEMENT_");
   IElementType TYPE = new OpnitElementType("TYPE");
+  IElementType VAR_DECLARATION = new OpnitElementType("VAR_DECLARATION");
 
   IElementType ANY_TYPE = new OpnitTokenType("any");
+  IElementType ASSIGN = new OpnitTokenType("=");
   IElementType BOOLEAN_TYPE = new OpnitTokenType("boolean");
   IElementType COLON = new OpnitTokenType(":");
   IElementType COMMA = new OpnitTokenType(",");
@@ -30,6 +34,7 @@ public interface OpnitTypes {
   IElementType FUNCTION = new OpnitTokenType("function");
   IElementType IDENTIFIER = new OpnitTokenType("IDENTIFIER");
   IElementType LBRACE = new OpnitTokenType("{");
+  IElementType LBRACKET = new OpnitTokenType("[");
   IElementType LPAREN = new OpnitTokenType("(");
   IElementType MINUS = new OpnitTokenType("-");
   IElementType MULTIPLY = new OpnitTokenType("*");
@@ -37,17 +42,25 @@ public interface OpnitTypes {
   IElementType NUMBER_TYPE = new OpnitTokenType("number");
   IElementType PLUS = new OpnitTokenType("+");
   IElementType RBRACE = new OpnitTokenType("}");
+  IElementType RBRACKET = new OpnitTokenType("]");
   IElementType RETURN = new OpnitTokenType("return");
   IElementType RPAREN = new OpnitTokenType(")");
   IElementType SEMICOLON = new OpnitTokenType(";");
   IElementType STRING_LITERAL = new OpnitTokenType("STRING_LITERAL");
   IElementType STRING_TYPE = new OpnitTokenType("string");
   IElementType TRUE = new OpnitTokenType("true");
+  IElementType VAR = new OpnitTokenType("var");
 
   class Factory {
     public static PsiElement createElement(ASTNode node) {
       IElementType type = node.getElementType();
-      if (type == BINARY_EXPR) {
+      if (type == ARRAY_ACCESS) {
+        return new OpnitArrayAccessImpl(node);
+      }
+      else if (type == ARRAY_LITERAL) {
+        return new OpnitArrayLiteralImpl(node);
+      }
+      else if (type == BINARY_EXPR) {
         return new OpnitBinaryExprImpl(node);
       }
       else if (type == CALL_EXPR) {
@@ -79,6 +92,9 @@ public interface OpnitTypes {
       }
       else if (type == TYPE) {
         return new OpnitTypeImpl(node);
+      }
+      else if (type == VAR_DECLARATION) {
+        return new OpnitVarDeclarationImpl(node);
       }
       throw new AssertionError("Unknown element type: " + type);
     }

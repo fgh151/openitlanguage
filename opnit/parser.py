@@ -7,6 +7,7 @@ class OpnitParser(Parser):
     precedence = (
         ('left', PLUS, MINUS),
         ('left', TIMES, DIVIDE),
+        ('left', LBRACKET, RBRACKET),
     )
 
     def __init__(self):
@@ -19,10 +20,14 @@ class OpnitParser(Parser):
 
     @_('statement')
     def statements(self, p):
+        if p.statement is None:
+            return []
         return [p.statement]
 
     @_('statements statement')
     def statements(self, p):
+        if p.statement is None:
+            return p.statements
         return p.statements + [p.statement]
 
     @_('function_def')
@@ -33,19 +38,19 @@ class OpnitParser(Parser):
     def statement(self, p):
         return ('statement', p.expr)
 
-    @_('expr NEWLINE')
-    def statement(self, p):
-        return ('statement', p.expr)
-
     @_('NEWLINE')
     def statement(self, p):
         return None
 
-    @_('FUNCTION ID LPAREN param_list RPAREN ARROW TYPE LBRACE statements RBRACE')
+    @_('WHILE LPAREN expr RPAREN LBRACE statements RBRACE')
+    def statement(self, p):
+        return ('while', p.expr, p.statements)
+
+    @_('FUNCTION ID LPAREN param_list RPAREN COLON TYPE LBRACE statements RBRACE')
     def function_def(self, p):
         return ('function', p.ID, p.param_list, p.TYPE, p.statements)
 
-    @_('FUNCTION ID LPAREN RPAREN ARROW TYPE LBRACE statements RBRACE')
+    @_('FUNCTION ID LPAREN RPAREN COLON TYPE LBRACE statements RBRACE')
     def function_def(self, p):
         return ('function', p.ID, [], p.TYPE, p.statements)
 
@@ -57,6 +62,10 @@ class OpnitParser(Parser):
     def param_list(self, p):
         return p.param_list + [p.param]
 
+    @_('ID COLON TYPE LBRACKET RBRACKET')
+    def param(self, p):
+        return (p.ID, f"{p.TYPE}[]")
+
     @_('ID COLON TYPE')
     def param(self, p):
         return (p.ID, p.TYPE)
@@ -65,17 +74,29 @@ class OpnitParser(Parser):
     def statement(self, p):
         return ('return', p.expr)
 
-    @_('RETURN expr NEWLINE')
-    def statement(self, p):
-        return ('return', p.expr)
-
     @_('VAR ID ASSIGN expr SEMI')
     def statement(self, p):
         return ('statement', ('assignment', p.ID, p.expr))
 
-    @_('VAR ID ASSIGN expr NEWLINE')
-    def statement(self, p):
-        return ('statement', ('assignment', p.ID, p.expr))
+    @_('LBRACKET expr_list RBRACKET')
+    def expr(self, p):
+        return ('array_literal', p.expr_list)
+
+    @_('LBRACKET RBRACKET')
+    def expr(self, p):
+        return ('array_literal', [])
+
+    @_('expr')
+    def expr_list(self, p):
+        return [p.expr]
+
+    @_('expr_list COMMA expr')
+    def expr_list(self, p):
+        return p.expr_list + [p.expr]
+
+    @_('expr LBRACKET expr RBRACKET')
+    def expr(self, p):
+        return ('array_access', p.expr0, p.expr1)
 
     @_('expr PLUS expr')
     def expr(self, p):
@@ -103,11 +124,11 @@ class OpnitParser(Parser):
 
     @_('TRUE')
     def expr(self, p):
-        return ('boolean', 'true')
+        return ('boolean', True)
 
     @_('FALSE')
     def expr(self, p):
-        return ('boolean', 'false')
+        return ('boolean', False)
 
     @_('ID LPAREN expr RPAREN')
     def expr(self, p):

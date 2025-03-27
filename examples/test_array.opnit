@@ -1,0 +1,5 @@
+function main(): number {
+    var numbers = [1, 2, 3];
+    print(numbers[0]);
+    return 0;
+} 

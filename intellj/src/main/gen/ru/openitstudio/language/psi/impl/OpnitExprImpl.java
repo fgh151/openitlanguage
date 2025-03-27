@@ -29,6 +29,18 @@ public class OpnitExprImpl extends ASTWrapperPsiElement implements OpnitExpr {
 
   @Override
   @Nullable
+  public OpnitArrayAccess getArrayAccess() {
+    return findChildByClass(OpnitArrayAccess.class);
+  }
+
+  @Override
+  @Nullable
+  public OpnitArrayLiteral getArrayLiteral() {
+    return findChildByClass(OpnitArrayLiteral.class);
+  }
+
+  @Override
+  @Nullable
   public OpnitBinaryExpr getBinaryExpr() {
     return findChildByClass(OpnitBinaryExpr.class);
   }

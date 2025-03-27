@@ -8,6 +8,12 @@ import com.intellij.psi.PsiElement;
 public interface OpnitExpr extends PsiElement {
 
   @Nullable
+  OpnitArrayAccess getArrayAccess();
+
+  @Nullable
+  OpnitArrayLiteral getArrayLiteral();
+
+  @Nullable
   OpnitBinaryExpr getBinaryExpr();
 
   @Nullable

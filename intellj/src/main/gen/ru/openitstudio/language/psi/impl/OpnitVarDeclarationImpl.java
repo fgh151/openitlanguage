@@ -11,14 +11,14 @@ import static ru.openitstudio.language.psi.OpnitTypes.*;
 import com.intellij.extapi.psi.ASTWrapperPsiElement;
 import ru.openitstudio.language.psi.*;
 
-public class OpnitStatement_Impl extends ASTWrapperPsiElement implements OpnitStatement_ {
+public class OpnitVarDeclarationImpl extends ASTWrapperPsiElement implements OpnitVarDeclaration {
 
-  public OpnitStatement_Impl(@NotNull ASTNode node) {
+  public OpnitVarDeclarationImpl(@NotNull ASTNode node) {
     super(node);
   }
 
   public void accept(@NotNull OpnitVisitor visitor) {
-    visitor.visitStatement_(this);
+    visitor.visitVarDeclaration(this);
   }
 
   @Override
@@ -28,21 +28,15 @@ public class OpnitStatement_Impl extends ASTWrapperPsiElement implements OpnitSt
   }
 
   @Override
-  @Nullable
+  @NotNull
   public OpnitExpr getExpr() {
-    return findChildByClass(OpnitExpr.class);
+    return findNotNullChildByClass(OpnitExpr.class);
   }
 
   @Override
-  @Nullable
-  public OpnitReturnStatement getReturnStatement() {
-    return findChildByClass(OpnitReturnStatement.class);
-  }
-
-  @Override
-  @Nullable
-  public OpnitVarDeclaration getVarDeclaration() {
-    return findChildByClass(OpnitVarDeclaration.class);
+  @NotNull
+  public PsiElement getIdentifier() {
+    return findNotNullChildByType(IDENTIFIER);
   }
 
 }

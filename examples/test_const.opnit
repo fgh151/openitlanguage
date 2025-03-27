@@ -1,0 +1,40 @@
+// Basic constant declarations
+const PI: number = 3.14159;
+const GREETING: string = "Hello, World!";
+const IS_DEBUG: boolean = true;
+
+// Constants with expressions
+const CIRCLE_AREA: number = PI * 25.0 * 25.0;  // Area of circle with radius 25
+const DOUBLE_PI: number = PI * 2;
+const MESSAGE: string = GREETING + " Welcome to Opnit!";
+
+// Constants with type inference to any
+const ANY_NUMBER: any = 42;
+const ANY_STRING: any = "This is a string";
+const ANY_BOOL: any = false;
+
+// Mathematical expressions
+const MATH_RESULT: number = 10 + 5 * 3 - 2 / 2;  // Should be 24
+
+// String concatenation
+const FIRST: string = "Hello";
+const SECOND: string = "World";
+const COMBINED: string = FIRST + " " + SECOND;  // "Hello World"
+
+// Boolean constants
+const TRUE_VAL: boolean = true;
+const FALSE_VAL: boolean = false;
+const BOOL_RESULT: any = TRUE_VAL;  // Can assign boolean to any
+
+function main(): number {
+    print(CIRCLE_AREA);
+    print(DOUBLE_PI);
+    print(MESSAGE);
+    print(ANY_NUMBER);
+    print(ANY_STRING);
+    print(ANY_BOOL);
+    print(MATH_RESULT);
+    print(COMBINED);
+    print(BOOL_RESULT);
+    return 0;
+} 

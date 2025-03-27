@@ -10,7 +10,7 @@ class OpnitLexer(Lexer):
         ID,
         TRUE, FALSE,
         NEWLINE,
-        FUNCTION, RETURN, VAR,
+        FUNCTION, RETURN, VAR, CONST,
         COLON,
         SEMI,
         TYPE,   # Added for type annotations
@@ -46,6 +46,7 @@ class OpnitLexer(Lexer):
     ID['function'] = FUNCTION
     ID['return'] = RETURN
     ID['var'] = VAR
+    ID['const'] = CONST
     ID['while'] = WHILE
     ID['number'] = TYPE
     ID['string'] = TYPE

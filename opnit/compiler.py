@@ -21,6 +21,7 @@ class OpnitCompiler:
         self.current_function = None
         self.variables = {}
         self.string_counter = 0
+        self.constants = {}  # Track constants and their values
         
         # Add target triple and data layout
         self.module.triple = "unknown-unknown-unknown"
@@ -113,7 +114,7 @@ class OpnitCompiler:
         string_type = ir.ArrayType(ir.IntType(8), len(string_bytes))
         string_const = ir.GlobalVariable(self.module, string_type, name=f"str_{len(self.string_constants)}")
         string_const.global_constant = True
-        string_const.initializer = ir.Constant(string_type, list(string_bytes))
+        string_const.initializer = ir.Constant(string_type, bytearray(string_bytes))
         
         # Get a pointer to the first element of the array
         zero = ir.Constant(ir.IntType(32), 0)
@@ -151,25 +152,120 @@ class OpnitCompiler:
             if main_func is None:
                 raise ValueError("No main function found")
             
-            # Verify the module
-            llvm.parse_assembly(str(self.module))
+            # Generate LLVM IR
+            llvm_ir = str(self.module)
             
-            print("Generated LLVM IR:")  # Debug
-            print(str(self.module))  # Debug
-            return str(self.module)
+            # Print generated IR for debugging
+            print("Generated LLVM IR:")
+            print(llvm_ir)
+            
+            # Parse and verify the module
+            try:
+                mod = llvm.parse_assembly(llvm_ir)
+                mod.verify()
+                return llvm_ir
+            except Exception as e:
+                print(f"Error verifying module: {e}")
+                raise
 
     def compile_statement(self, stmt):
         if stmt is None:
             return None
         
-        if stmt[0] == 'statement':
-            return self.compile_expr(stmt[1])
+        if stmt[0] == 'const_decl':
+            # stmt format: ('const_decl', name, type, expr)
+            name = stmt[1]
+            type_name = stmt[2]
+            value_expr = stmt[3]
+            
+            # Evaluate the constant expression at compile time
+            value = self.evaluate_constant_expr(value_expr)
+            if value is None:
+                raise ValueError(f"Constant {name} must be initialized with a compile-time constant expression")
+            
+            # Create LLVM constant
+            if type_name == 'any':
+                # For 'any' type, infer the actual type from the value
+                if isinstance(value, float) or isinstance(value, int):
+                    llvm_type = ir.DoubleType()
+                    llvm_value = ir.Constant(llvm_type, float(value))
+                elif isinstance(value, str):
+                    string_bytes = value.encode('utf-8') + b'\0'
+                    string_type = ir.ArrayType(ir.IntType(8), len(string_bytes))
+                    llvm_value = ir.Constant(string_type, bytearray(string_bytes))
+                elif isinstance(value, bool):
+                    llvm_type = ir.IntType(1)
+                    llvm_value = ir.Constant(llvm_type, bool(value))
+                else:
+                    raise ValueError(f"Unsupported value type for 'any': {type(value)}")
+            else:
+                llvm_type = self.get_type(type_name)
+                if type_name == 'number':
+                    llvm_value = ir.Constant(llvm_type, float(value))
+                elif type_name == 'string':
+                    string_bytes = str(value).encode('utf-8') + b'\0'
+                    string_type = ir.ArrayType(ir.IntType(8), len(string_bytes))
+                    llvm_value = ir.Constant(string_type, bytearray(string_bytes))
+                elif type_name == 'boolean':
+                    llvm_value = ir.Constant(llvm_type, bool(value))
+                else:
+                    raise ValueError(f"Unsupported constant type: {type_name}")
+            
+            # Create global constant
+            global_const = ir.GlobalVariable(self.module, llvm_value.type, name=name)
+            global_const.global_constant = True
+            global_const.initializer = llvm_value
+            
+            # Store in constants map with both LLVM value and actual value for compile-time evaluation
+            self.constants[name] = (global_const, type_name, value)
+            return None
+        elif stmt[0] == 'statement':
+            if isinstance(stmt[1], tuple) and stmt[1][0] == 'call':
+                # Handle function call
+                call_expr = stmt[1]
+                func_name = call_expr[1]
+                args = call_expr[2]
+                
+                # Special handling for print function
+                if func_name == 'print':
+                    return self.compile_print(args)
+                
+                # Regular function call
+                if func_name not in self.functions:
+                    raise ValueError(f"Function {func_name} not defined")
+                
+                func = self.functions[func_name]
+                compiled_args = [self.compile_expr(arg) for arg in args]
+                return self.builder.call(func, compiled_args)
+            else:
+                return self.compile_expr(stmt[1])
         elif stmt[0] == 'return':
             if len(stmt) > 1:
                 retval = self.compile_expr(stmt[1])
+                if retval is None:
+                    # If no return value is provided, return a default value based on the function's return type
+                    ret_type = self.current_function.function_type.return_type
+                    if isinstance(ret_type, ir.DoubleType):
+                        retval = ir.Constant(ret_type, 0.0)
+                    elif isinstance(ret_type, ir.IntType):
+                        retval = ir.Constant(ret_type, 0)
+                    elif isinstance(ret_type, ir.PointerType):
+                        retval = ir.Constant(ret_type, None)
+                    else:
+                        raise ValueError(f"Unsupported return type: {ret_type}")
                 return self.builder.ret(retval)
             else:
-                return self.builder.ret_void()
+                # If no return value is provided, return a default value based on the function's return type
+                ret_type = self.current_function.function_type.return_type
+                if isinstance(ret_type, ir.DoubleType):
+                    retval = ir.Constant(ret_type, 0.0)
+                elif isinstance(ret_type, ir.IntType):
+                    retval = ir.Constant(ret_type, 0)
+                elif isinstance(ret_type, ir.PointerType):
+                    retval = ir.Constant(ret_type, None)
+                else:
+                    raise ValueError(f"Unsupported return type: {ret_type}")
+                return self.builder.ret(retval)
         elif stmt[0] == 'function':
             return self.compile_function(stmt)
         elif stmt[0] == 'while':
@@ -183,8 +279,8 @@ class OpnitCompiler:
             
             # Emit the condition code
             self.builder.position_at_end(cond_block)
-            cond = self.compile_expr(stmt[1])
-            self.builder.cbranch(cond, body_block, end_block)
+            cond_val = self.compile_expr(stmt[1])
+            self.builder.cbranch(cond_val, body_block, end_block)
             
             # Emit the body code
             self.builder.position_at_end(body_block)
@@ -192,117 +288,84 @@ class OpnitCompiler:
                 self.compile_statement(body_stmt)
             self.builder.branch(cond_block)
             
-            # Continue building from end block
+            # Continue with the end block
             self.builder.position_at_end(end_block)
             return None
         else:
             raise ValueError(f"Unknown statement type: {stmt[0]}")
 
     def compile_function(self, node):
-        print(f"Compiling function: {node}")
-        func_name = node[1]
+        # node format: ('function', name, params, return_type, body)
+        name = node[1]
         params = node[2]
-        return_type_name = node[3]
+        return_type = node[3]
         body = node[4]
-
-        # Determine return type
-        if func_name == 'main':
-            return_type = ir.IntType(32)  # main always returns int
-        elif return_type_name == 'number':
-            return_type = ir.DoubleType()
-        elif return_type_name == 'string':
-            return_type = ir.PointerType(ir.IntType(8))
-        elif return_type_name == 'boolean':
-            return_type = ir.IntType(1)
-        else:
-            raise TypeError(f"Unknown return type: {return_type_name}")
-
-        # Create function type
-        param_types = []
-        for param_name, param_type in params:
-            if param_type == 'number':
-                param_types.append(ir.DoubleType())
-            elif param_type == 'string':
-                param_types.append(ir.PointerType(ir.IntType(8)))
-            elif param_type == 'boolean':
-                param_types.append(ir.IntType(1))
-            else:
-                raise TypeError(f"Unknown parameter type: {param_type}")
         
-        func_type = ir.FunctionType(return_type, param_types)
+        # Create function type
+        param_types = [self.get_type(param[1]) for param in params]
+        ret_type = self.get_type(return_type)
+        func_type = ir.FunctionType(ret_type, param_types)
         
         # Create function
-        if func_name in self.module.globals:
-            func = self.module.get_global(func_name)
-            if not isinstance(func, ir.Function):
-                raise TypeError(f"{func_name} already defined as non-function")
-            if not func.is_declaration:
-                raise TypeError(f"{func_name} already defined")
-        else:
-            func = ir.Function(self.module, func_type, func_name)
-            self.functions[func_name] = func  # Store the function
-
+        func = ir.Function(self.module, func_type, name=name)
+        
         # Create entry block
-        block = func.append_basic_block('entry')
-        
-        # Store previous state
+        block = func.append_basic_block(name="entry")
         old_builder = self.builder
-        old_vars = self.variables
-        old_function = self.current_function
-        
-        # Create new builder and variable context
         self.builder = ir.IRBuilder(block)
-        self.variables = {}
+        
+        # Store current function
+        old_function = self.current_function
         self.current_function = func
         
-        # Allocate parameters
-        for i, ((param_name, _), arg) in enumerate(zip(params, func.args)):
-            var = self.builder.alloca(arg.type, name=param_name)
-            self.builder.store(arg, var)
-            self.variables[param_name] = var
-
-        # Compile body
+        # Save old variables
+        old_variables = self.variables.copy()
+        self.variables.clear()
+        
+        # Create parameter variables
+        for i, param in enumerate(params):
+            param_name = param[0]
+            param_type = param[1]
+            alloca = self.builder.alloca(self.get_type(param_type), name=param_name)
+            self.builder.store(func.args[i], alloca)
+            self.variables[param_name] = alloca
+        
+        # Compile function body
         for stmt in body:
-            if stmt is not None:  # Skip None statements
-                if stmt[0] == 'return':
-                    if len(stmt) > 1:
-                        retval = self.compile_expr(stmt[1])
-                        if func_name == 'main':
-                            # Convert float to int for main's return
-                            if isinstance(retval.type, ir.DoubleType):
-                                retval = self.builder.fptosi(retval, ir.IntType(32))
-                        self.builder.ret(retval)
-                    else:
-                        self.builder.ret_void()
-                else:
-                    self.compile_statement(stmt)
-
-        # Add return if function is not terminated
+            self.compile_statement(stmt)
+        
+        # Add return if not terminated
         if not self.builder.block.is_terminated:
-            if isinstance(return_type, ir.VoidType):
-                self.builder.ret_void()
-            elif isinstance(return_type, ir.IntType) and return_type.width == 32:
-                self.builder.ret(ir.Constant(ir.IntType(32), 0))
-            elif isinstance(return_type, ir.DoubleType):
+            if return_type == 'number':
                 self.builder.ret(ir.Constant(ir.DoubleType(), 0.0))
-            elif isinstance(return_type, ir.IntType) and return_type.width == 1:
+            elif return_type == 'boolean':
                 self.builder.ret(ir.Constant(ir.IntType(1), 0))
+            elif return_type == 'string':
+                empty_str = self.create_string_constant("")
+                self.builder.ret(empty_str)
             else:
-                self.builder.ret(ir.Constant(return_type, None))
-
-        # Restore previous state
+                # For any other type, return a null pointer
+                self.builder.ret(ir.Constant(ret_type, None))
+        
+        # Restore old state
         self.builder = old_builder
-        self.variables = old_vars
         self.current_function = old_function
-
+        self.variables = old_variables
+        
+        # Store function
+        self.functions[name] = func
         return func
 
     def compile_expr(self, expr):
-        if expr[0] == 'number':
-            return ir.Constant(ir.DoubleType(), float(expr[1]))
-        elif expr[0] == 'string':
-            return self.create_string_constant(expr[1])
-        elif expr[0] == 'variable':
+        if expr[0] == 'variable':
+            # Check if it's a constant first
+            if expr[1] in self.constants:
+                const_global = self.constants[expr[1]][0]
+                # For strings, we need to get a pointer to the first character
+                if isinstance(const_global.type.pointee, ir.ArrayType):
+                    zero = ir.Constant(ir.IntType(32), 0)
+                    return self.builder.gep(const_global, [zero, zero], inbounds=True)
+                return self.builder.load(const_global)
             var_ptr = self.variables[expr[1]]
             if isinstance(var_ptr.type.pointee, ir.ArrayType):
                 return var_ptr
@@ -344,10 +407,20 @@ class OpnitCompiler:
             element_ptr = self.builder.gep(array, [ir.Constant(ir.IntType(32), 0), index])
             return self.builder.load(element_ptr)
         elif expr[0] == 'call':
-            if expr[1] == 'print':
-                return self.compile_print(expr[2])
-            else:
-                return None
+            func_name = expr[1]
+            args = expr[2]
+            
+            # Special handling for print function
+            if func_name == 'print':
+                return self.compile_print(args)
+            
+            # Regular function call
+            if func_name not in self.functions:
+                raise ValueError(f"Function '{func_name}' not defined")
+            
+            func = self.functions[func_name]
+            compiled_args = [self.compile_expr(arg) for arg in args]
+            return self.builder.call(func, compiled_args)
         return None
 
     def get_string_value(self, ptr):
@@ -467,12 +540,84 @@ class OpnitCompiler:
         return array_ptr
 
     def compile_print(self, args):
-        if not isinstance(args, list):
-            args = [args]
+        """Compile print function call."""
         for arg in args:
             value = self.compile_expr(arg)
+            
+            # Get the appropriate format string based on the value type
             if isinstance(value.type, ir.DoubleType):
-                fmt = self.module.get_global("float_fmt")
-                fmt_ptr = self.builder.gep(fmt, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
+                fmt = self.string_constants["float_fmt"]
+            elif isinstance(value.type, ir.IntType) and value.type.width == 1:
+                fmt = self.string_constants["true_str" if value else "false_str"]
+            else:
+                fmt = self.string_constants["str_fmt"]
+            
+            # Get pointer to format string
+            zero = ir.Constant(ir.IntType(32), 0)
+            fmt_ptr = self.builder.gep(fmt, [zero, zero], inbounds=True)
+            
+            # Call printf
+            if isinstance(value.type, ir.DoubleType):
                 self.builder.call(self.printf, [fmt_ptr, value])
+            elif isinstance(value.type, ir.IntType) and value.type.width == 1:
+                self.builder.call(self.printf, [fmt_ptr])
+            else:
+                self.builder.call(self.printf, [fmt_ptr, value])
+        
+        return None
+
+    def evaluate_constant_expr(self, expr):
+        """Evaluates constant expressions at compile time."""
+        print(f"Evaluating constant expression: {expr}")  # Debug
+        if expr[0] == 'number':
+            print(f"Number literal: {expr[1]}")  # Debug
+            return expr[1]
+        elif expr[0] == 'string':
+            print(f"String literal: {expr[1]}")  # Debug
+            return expr[1]
+        elif expr[0] == 'boolean':
+            print(f"Boolean literal: {expr[1]}")  # Debug
+            return expr[1]
+        elif expr[0] == 'binary':
+            print(f"Binary operation: {expr[1]}")  # Debug
+            op = expr[1]
+            left = self.evaluate_constant_expr(expr[2])
+            right = self.evaluate_constant_expr(expr[3])
+            
+            print(f"Left operand: {left}, Right operand: {right}")  # Debug
+            
+            if left is None or right is None:
+                print("One of the operands is None")  # Debug
+                return None
+                
+            # Handle string concatenation
+            if isinstance(left, str) or isinstance(right, str):
+                if op == '+':
+                    result = str(left) + str(right)
+                    print(f"String concatenation result: {result}")  # Debug
+                    return result
+                else:
+                    raise ValueError(f"Invalid operation '{op}' for strings")
+                    
+            # Handle numeric operations
+            if op == '+':
+                return left + right
+            elif op == '-':
+                return left - right
+            elif op == '*':
+                return left * right
+            elif op == '/':
+                if right == 0:
+                    raise ValueError("Division by zero in constant expression")
+                return left / right
+        elif expr[0] == 'variable':
+            print(f"Variable reference: {expr[1]}")  # Debug
+            # Look up constant value
+            if expr[1] in self.constants:
+                print(f"Found constant: {expr[1]}")  # Debug
+                const_global, const_type, const_value = self.constants[expr[1]]
+                print(f"Constant type: {const_type}, value: {const_value}")  # Debug
+                return const_value
+            print(f"Variable {expr[1]} not found in constants")  # Debug
+            return None
         return None 

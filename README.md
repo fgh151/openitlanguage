@@ -10,6 +10,53 @@ Opnit is a simple yet powerful programming language that supports basic arithmet
 - `boolean`: True/false values (e.g., `true`, `false`)
 - `array`: Ordered collections of values (e.g., `[1, 2, 3]`, `["hello", "world"]`)
 
+### Constants
+
+Constants are immutable values that are evaluated at compile time. They are defined using the `const` keyword followed by a name, type, and value. Constants can be of any basic type and can include expressions that can be evaluated at compile time.
+
+#### Constant Declaration
+```opnit
+const PI: number = 3.14159;
+const GREETING: string = "Hello, World!";
+const IS_DEBUG: boolean = true;
+```
+
+#### Constant Expressions
+Constants can be defined using expressions involving other constants or literal values:
+
+```opnit
+const PI: number = 3.14159;
+const RADIUS: number = 25.0;
+const CIRCLE_AREA: number = PI * RADIUS * RADIUS;  # Evaluated at compile time
+
+const FIRST: string = "Hello";
+const SECOND: string = "World";
+const COMBINED: string = FIRST + " " + SECOND;     # String concatenation at compile time
+```
+
+#### Type Inference with 'any'
+Constants can use the `any` type for flexible type handling:
+
+```opnit
+const ANY_NUMBER: any = 42.0;
+const ANY_STRING: any = "This is a string";
+const ANY_BOOL: any = false;
+```
+
+#### Using Constants
+Constants can be used anywhere a literal value is expected:
+
+```opnit
+function calculate_area(radius: number) : number {
+    return PI * radius * radius;  # Using PI constant
+}
+
+print(GREETING);  # Using string constant
+if (IS_DEBUG) {   # Using boolean constant
+    print("Debug mode is on");
+}
+```
+
 ### Arrays
 
 #### Array Declaration and Initialization

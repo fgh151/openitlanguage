@@ -13,6 +13,7 @@ class OpnitParser(Parser):
     def __init__(self):
         self.env = {}
         self.functions = {}
+        self.constants = {}
 
     @_('statements')
     def program(self, p):
@@ -77,6 +78,14 @@ class OpnitParser(Parser):
     @_('VAR ID ASSIGN expr SEMI')
     def statement(self, p):
         return ('statement', ('assignment', p.ID, p.expr))
+
+    @_('CONST ID COLON TYPE ASSIGN expr SEMI')
+    def statement(self, p):
+        return ('const_decl', p.ID, p.TYPE, p.expr)
+
+    @_('CONST ID ASSIGN expr SEMI')
+    def statement(self, p):
+        return ('const_decl', p.ID, 'any', p.expr)
 
     @_('LBRACKET expr_list RBRACKET')
     def expr(self, p):

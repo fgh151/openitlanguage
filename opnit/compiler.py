@@ -1,6 +1,12 @@
 import llvmlite.binding as llvm
 from llvmlite import ir
 
+from opnit.builtin.len_func import LenFunction
+from opnit.builtin.print_func import PrintFunction
+
+
+# from .builtin import PrintFunction, LenFunction
+
 class OpnitCompiler:
     def __init__(self):
         # Initialize LLVM
@@ -26,10 +32,6 @@ class OpnitCompiler:
         # Add target triple and data layout
         self.module.triple = "unknown-unknown-unknown"
         self.module.data_layout = ""
-        
-        # Create printf function declaration
-        printf_type = ir.FunctionType(ir.IntType(32), [ir.PointerType(ir.IntType(8))], var_arg=True)
-        self.printf = ir.Function(self.module, printf_type, name="printf")
         
         # Create format strings
         float_fmt = ir.Constant(ir.ArrayType(ir.IntType(8), 6), bytearray("%.1f\n\0".encode()))
@@ -86,11 +88,6 @@ class OpnitCompiler:
         input_buffer_var.initializer = input_buffer
         self.string_constants["input_buffer"] = input_buffer_var
 
-        # Create len function
-        len_type = ir.FunctionType(ir.DoubleType(), [ir.PointerType(ir.ArrayType(ir.DoubleType(), 0))])
-        len_func = ir.Function(self.module, len_type, name="len")
-        self.functions["len"] = len_func
-        
         # Create dummy function to avoid empty module
         dummy_type = ir.FunctionType(ir.IntType(32), [])
         dummy_func = ir.Function(self.module, dummy_type, name="dummy")
@@ -101,6 +98,16 @@ class OpnitCompiler:
         # Initialize builder with a dummy block that will be replaced
         self.builder = ir.IRBuilder(dummy_func.append_basic_block(name="entry"))
         self.builder.ret(ir.Constant(ir.IntType(32), 0))  # Add proper return
+
+        # Initialize built-in functions
+        self.builtin_functions = {
+            'print': PrintFunction(),
+            'len': LenFunction()
+        }
+        
+        # Register built-in functions
+        for name, func in self.builtin_functions.items():
+            self.functions[name] = func.register(self.module, self.builder, self.string_constants)
 
     def add_string_constant(self, string, name):
         string_bytes = string.encode("utf8") + b'\0'
@@ -419,20 +426,10 @@ class OpnitCompiler:
             func_name = expr[1]
             args = expr[2]
             
-            # Special handling for print function
-            if func_name == 'print':
-                return self.compile_print(args)
-            
-            # Special handling for len function
-            if func_name == 'len':
-                if len(args) != 1:
-                    raise ValueError("len function expects exactly one argument")
-                array = self.compile_expr(args[0])
-                if not isinstance(array.type, ir.PointerType) or not isinstance(array.type.pointee, ir.ArrayType):
-                    raise ValueError("len function expects an array argument")
-                # Return array length as double
-                length = ir.Constant(ir.DoubleType(), array.type.pointee.count)
-                return length
+            # Handle built-in functions
+            if func_name in self.builtin_functions:
+                compiled_args = [self.compile_expr(arg) for arg in args]
+                return self.builtin_functions[func_name].compile_call(self.builder, compiled_args, self.string_constants)
             
             # Regular function call
             if func_name not in self.functions:
@@ -567,30 +564,8 @@ class OpnitCompiler:
 
     def compile_print(self, args):
         """Compile print function call."""
-        for arg in args:
-            value = self.compile_expr(arg)
-            
-            # Get the appropriate format string based on the value type
-            if isinstance(value.type, ir.DoubleType):
-                fmt = self.string_constants["float_fmt"]
-            elif isinstance(value.type, ir.IntType) and value.type.width == 1:
-                fmt = self.string_constants["true_str" if value else "false_str"]
-            else:
-                fmt = self.string_constants["str_fmt"]
-            
-            # Get pointer to format string
-            zero = ir.Constant(ir.IntType(32), 0)
-            fmt_ptr = self.builder.gep(fmt, [zero, zero], inbounds=True)
-            
-            # Call printf
-            if isinstance(value.type, ir.DoubleType):
-                self.builder.call(self.printf, [fmt_ptr, value])
-            elif isinstance(value.type, ir.IntType) and value.type.width == 1:
-                self.builder.call(self.printf, [fmt_ptr])
-            else:
-                self.builder.call(self.printf, [fmt_ptr, value])
-        
-        return None
+        # Use the built-in print function
+        return self.builtin_functions['print'].compile_call(self.builder, [self.compile_expr(arg) for arg in args], self.string_constants)
 
     def evaluate_constant_expr(self, expr):
         """Evaluates constant expressions at compile time."""

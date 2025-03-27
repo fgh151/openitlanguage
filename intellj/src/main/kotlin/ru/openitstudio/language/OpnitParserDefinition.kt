@@ -20,11 +20,14 @@ class OpnitParserDefinition : ParserDefinition {
         val WHITE_SPACES = TokenSet.create(TokenType.WHITE_SPACE)
         val COMMENTS = TokenSet.create(OpnitTypes.COMMENT)
         val FILE = IFileElementType(OpnitLanguage.INSTANCE)
+
+        private val lexerCache = ThreadLocal.withInitial { OpnitLexerAdapter() }
+        private val parserCache = ThreadLocal.withInitial { OpnitParser() }
     }
 
-    override fun createLexer(project: Project?): Lexer = OpnitLexerAdapter()
+    override fun createLexer(project: Project?): Lexer = lexerCache.get()
 
-    override fun createParser(project: Project?): PsiParser = OpnitParser()
+    override fun createParser(project: Project?): PsiParser = parserCache.get()
 
     override fun getFileNodeType(): IFileElementType = FILE
 

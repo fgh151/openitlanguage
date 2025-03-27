@@ -6,6 +6,7 @@ import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.fileTypes.SyntaxHighlighterBase
 import com.intellij.psi.tree.IElementType
 import ru.openitstudio.language.psi.OpnitTypes
+import java.util.concurrent.ConcurrentHashMap
 
 class OpnitSyntaxHighlighter : SyntaxHighlighterBase() {
     companion object {
@@ -16,12 +17,8 @@ class OpnitSyntaxHighlighter : SyntaxHighlighterBase() {
         val OPERATOR = TextAttributesKey.createTextAttributesKey("OPNIT_OPERATOR", DefaultLanguageHighlighterColors.OPERATION_SIGN)
         val PARENTHESES = TextAttributesKey.createTextAttributesKey("OPNIT_PARENTHESES", DefaultLanguageHighlighterColors.PARENTHESES)
         val IDENTIFIER = TextAttributesKey.createTextAttributesKey("OPNIT_IDENTIFIER", DefaultLanguageHighlighterColors.IDENTIFIER)
-    }
 
-    override fun getHighlightingLexer(): Lexer = OpnitLexerAdapter()
-
-    override fun getTokenHighlights(tokenType: IElementType): Array<TextAttributesKey> {
-        return when (tokenType) {
+        private val KEYWORDS = setOf(
             OpnitTypes.FUNCTION,
             OpnitTypes.RETURN,
             OpnitTypes.TRUE,
@@ -29,23 +26,38 @@ class OpnitSyntaxHighlighter : SyntaxHighlighterBase() {
             OpnitTypes.NUMBER_TYPE,
             OpnitTypes.STRING_TYPE,
             OpnitTypes.BOOLEAN_TYPE,
-            OpnitTypes.ANY_TYPE -> arrayOf(KEYWORD)
-            
-            OpnitTypes.STRING_LITERAL -> arrayOf(STRING)
-            OpnitTypes.NUMBER_LITERAL -> arrayOf(NUMBER)
-            OpnitTypes.COMMENT -> arrayOf(COMMENT)
-            
+            OpnitTypes.ANY_TYPE
+        )
+
+        private val OPERATORS = setOf(
             OpnitTypes.PLUS,
             OpnitTypes.MINUS,
             OpnitTypes.MULTIPLY,
-            OpnitTypes.DIVIDE -> arrayOf(OPERATOR)
-            
+            OpnitTypes.DIVIDE
+        )
+
+        private val PARENTHESES_TOKENS = setOf(
             OpnitTypes.LPAREN,
-            OpnitTypes.RPAREN -> arrayOf(PARENTHESES)
-            
-            OpnitTypes.IDENTIFIER -> arrayOf(IDENTIFIER)
-            
-            else -> TextAttributesKey.EMPTY_ARRAY
+            OpnitTypes.RPAREN
+        )
+
+        private val TOKEN_HIGHLIGHTS = ConcurrentHashMap<IElementType, Array<TextAttributesKey>>().apply {
+            // Pre-populate common tokens
+            KEYWORDS.forEach { put(it, arrayOf(KEYWORD)) }
+            put(OpnitTypes.STRING_LITERAL, arrayOf(STRING))
+            put(OpnitTypes.NUMBER_LITERAL, arrayOf(NUMBER))
+            put(OpnitTypes.COMMENT, arrayOf(COMMENT))
+            OPERATORS.forEach { put(it, arrayOf(OPERATOR)) }
+            PARENTHESES_TOKENS.forEach { put(it, arrayOf(PARENTHESES)) }
+            put(OpnitTypes.IDENTIFIER, arrayOf(IDENTIFIER))
         }
+
+        private val lexerCache = ThreadLocal.withInitial { OpnitLexerAdapter() }
+    }
+
+    override fun getHighlightingLexer(): Lexer = lexerCache.get()
+
+    override fun getTokenHighlights(tokenType: IElementType): Array<TextAttributesKey> {
+        return TOKEN_HIGHLIGHTS[tokenType] ?: TextAttributesKey.EMPTY_ARRAY
     }
 } 

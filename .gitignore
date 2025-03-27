@@ -3,3 +3,4 @@
 examples/*
 !examples/*.*
 opnit.*
+.DS_Store

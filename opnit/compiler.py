@@ -85,6 +85,11 @@ class OpnitCompiler:
         input_buffer_var.global_constant = True
         input_buffer_var.initializer = input_buffer
         self.string_constants["input_buffer"] = input_buffer_var
+
+        # Create len function
+        len_type = ir.FunctionType(ir.DoubleType(), [ir.PointerType(ir.ArrayType(ir.DoubleType(), 0))])
+        len_func = ir.Function(self.module, len_type, name="len")
+        self.functions["len"] = len_func
         
         # Create dummy function to avoid empty module
         dummy_type = ir.FunctionType(ir.IntType(32), [])
@@ -377,7 +382,8 @@ class OpnitCompiler:
                 if expr[2][0] == 'array_literal':
                     # Handle array literal assignment
                     elements = expr[2][1]
-                    array_ptr = self.create_array(ir.DoubleType(), len(elements))
+                    array_type = ir.ArrayType(ir.DoubleType(), len(elements))
+                    array_ptr = self.builder.alloca(array_type)
                     self.variables[var_name] = array_ptr
                     for i, element in enumerate(elements):
                         element_val = self.compile_expr(element)
@@ -392,8 +398,11 @@ class OpnitCompiler:
         elif expr[0] == 'array_literal':
             elements = [self.compile_expr(e) for e in expr[1]]
             if not elements:
-                return None
-            array_type = self.get_array_type(elements[0].type, len(elements))
+                # Create empty array
+                array_type = ir.ArrayType(ir.DoubleType(), 0)
+                array_ptr = self.builder.alloca(array_type)
+                return array_ptr
+            array_type = ir.ArrayType(ir.DoubleType(), len(elements))
             array_ptr = self.builder.alloca(array_type)
             for i, element in enumerate(elements):
                 element_ptr = self.builder.gep(array_ptr, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), i)])
@@ -414,6 +423,17 @@ class OpnitCompiler:
             if func_name == 'print':
                 return self.compile_print(args)
             
+            # Special handling for len function
+            if func_name == 'len':
+                if len(args) != 1:
+                    raise ValueError("len function expects exactly one argument")
+                array = self.compile_expr(args[0])
+                if not isinstance(array.type, ir.PointerType) or not isinstance(array.type.pointee, ir.ArrayType):
+                    raise ValueError("len function expects an array argument")
+                # Return array length as double
+                length = ir.Constant(ir.DoubleType(), array.type.pointee.count)
+                return length
+            
             # Regular function call
             if func_name not in self.functions:
                 raise ValueError(f"Function '{func_name}' not defined")
@@ -421,6 +441,12 @@ class OpnitCompiler:
             func = self.functions[func_name]
             compiled_args = [self.compile_expr(arg) for arg in args]
             return self.builder.call(func, compiled_args)
+        elif expr[0] == 'number':
+            return ir.Constant(ir.DoubleType(), float(expr[1]))
+        elif expr[0] == 'string':
+            return self.create_string_constant(expr[1])
+        elif expr[0] == 'boolean':
+            return ir.Constant(ir.IntType(1), bool(expr[1]))
         return None
 
     def get_string_value(self, ptr):
